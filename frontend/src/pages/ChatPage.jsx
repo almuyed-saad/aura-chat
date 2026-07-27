@@ -445,7 +445,7 @@ const handleDeleteMessage = (messageId) => {
       </nav>
 
       {/* Main Content - Full height on mobile */}
-<div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6 h-[calc(100vh-64px)] sm:h-auto">
+<div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6 h-[calc(100dvh-56px)] sm:h-auto">
   <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 h-full lg:h-auto">
           {/* Sidebar - Mobile Overlay */}
           <AnimatePresence>
@@ -597,7 +597,7 @@ const handleDeleteMessage = (messageId) => {
           </div>
 
           {/* Chat Window - Full height on mobile with input at bottom */}
-          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-[calc(100vh-120px)] sm:min-h-[500px] transition-colors duration-500`}>
+          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
             {selectedUser ? (
               <>
                 {/* Chat Header */}
@@ -614,7 +614,7 @@ const handleDeleteMessage = (messageId) => {
                 </div>
 
 {/* Messages */}
-<div className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 max-h-[300px] sm:max-h-[400px]">
+<div className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0">
   {messages.map((msg, index) => {
     const senderId = normalizeSender(msg.sender)
     const isMyMessage = String(senderId) === String(user?._id)
