@@ -30,14 +30,14 @@ const NotificationBanner = () => {
     handleDismiss()
   }
 
-  return (
-    <AnimatePresence>
-      {showBanner && (
+return (
+  <AnimatePresence>
+    {showBanner && (
+      <div className="fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-[60] w-[92%] max-w-md px-2">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
-          className="fixed top-20 sm:top-24 left-1/2 -translate-x-1/2 z-[60] w-[92%] max-w-md px-2"
         >
           <div className="bg-white dark:bg-dark-surface rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center">
@@ -65,9 +65,10 @@ const NotificationBanner = () => {
             </button>
           </div>
         </motion.div>
-      )}
-    </AnimatePresence>
-  )
+      </div>
+    )}
+  </AnimatePresence>
+)
 }
 
 export default NotificationBanner
