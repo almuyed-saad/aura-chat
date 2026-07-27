@@ -81,7 +81,7 @@ const ChatPage = () => {
     setUser(normalizeUser(userData))
   }, [navigate])
 
-  // Fetch all users
+  // Fetch all users & restore selected conversation
   useEffect(() => {
     const fetchUsers = async () => {
       if (!token) return
@@ -91,6 +91,15 @@ const ChatPage = () => {
           headers: { Authorization: `Bearer ${token}` }
         })
         setUsers(response.data)
+
+        // ✅ Restore previously selected conversation after refresh
+        const savedUserId = localStorage.getItem('selectedUserId')
+        if (savedUserId) {
+          const restoredUser = response.data.find(u => u._id === savedUserId)
+          if (restoredUser) {
+            setSelectedUser(restoredUser)
+          }
+        }
       } catch (error) {
         console.error('Error fetching users:', error)
         toast.error('Failed to load users')
@@ -206,7 +215,7 @@ const ChatPage = () => {
       ))
     }
 
-    // ✅ Handle messages delivered (sent → delivered)
+    // Handle messages delivered (sent → delivered)
     const handleMessagesDelivered = ({ messageIds }) => {
       setMessages(prev => prev.map(msg =>
         messageIds.includes(msg._id) && msg.status !== 'read'
@@ -215,7 +224,7 @@ const ChatPage = () => {
       ))
     }
 
-    // ✅ Handle messages read (delivered → read)
+    // Handle messages read (delivered → read)
     const handleMessagesRead = ({ messageIds }) => {
       setMessages(prev => prev.map(msg =>
         messageIds.includes(msg._id)
@@ -267,22 +276,21 @@ const ChatPage = () => {
     socket.emit('addReaction', { messageId, emoji })
   }
 
-const handleDeleteMessage = (messageId) => {
-  if (!socket) {
-    toast.error('Cannot delete - no connection')
-    return
+  const handleDeleteMessage = (messageId) => {
+    if (!socket) {
+      toast.error('Cannot delete - no connection')
+      return
+    }
+
+    // Optimistic update
+    setMessages(prev => prev.map(msg =>
+      msg._id === messageId
+        ? { ...msg, deleted: true, text: '', image: '' }
+        : msg
+    ))
+
+    socket.emit('deleteMessage', { messageId })
   }
-
-  // Optimistic update - reflect the deletion instantly, don't wait on the
-  // server round-trip (same fix pattern as the reactions bug earlier)
-  setMessages(prev => prev.map(msg =>
-    msg._id === messageId
-      ? { ...msg, deleted: true, text: '', image: '' }
-      : msg
-  ))
-
-  socket.emit('deleteMessage', { messageId })
-}
 
   const handleCopyMessage = (text) => {
     if (!text) {
@@ -305,8 +313,10 @@ const handleDeleteMessage = (messageId) => {
     setReplyToMessage(null)
   }
 
+  // ✅ SELECT USER - Persist to localStorage
   const selectUser = (chatUser) => {
     setSelectedUser(chatUser)
+    localStorage.setItem('selectedUserId', chatUser._id)  // ✅ Save selection
     
     if (unreadCounts[chatUser._id] > 0) {
       clearUnreadCount(chatUser._id)
@@ -418,20 +428,21 @@ const handleDeleteMessage = (messageId) => {
             <div className="flex items-center gap-2 sm:gap-4">
               <ThemeToggle />
 
-<div className="flex items-center gap-2 sm:gap-3">
-  <button onClick={() => setShowProfile(true)} className="flex-shrink-0">
-    <Avatar user={user} size="sm" theme={theme} isDark={isDark} />
-  </button>
-  <span className={`text-xs sm:text-sm font-medium ${theme.text} hidden xs:inline-block`}>
-    {user?.name || 'User'}
-  </span>
-  {isConnected && <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></span>}
-</div>
+              <div className="flex items-center gap-2 sm:gap-3">
+                <button onClick={() => setShowProfile(true)} className="flex-shrink-0">
+                  <Avatar user={user} size="sm" theme={theme} isDark={isDark} />
+                </button>
+                <span className={`text-xs sm:text-sm font-medium ${theme.text} hidden xs:inline-block`}>
+                  {user?.name || 'User'}
+                </span>
+                {isConnected && <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-green-500 rounded-full"></span>}
+              </div>
 
               <button
                 onClick={() => {
                   localStorage.removeItem('token')
                   localStorage.removeItem('user')
+                  localStorage.removeItem('selectedUserId')  // ✅ Clear saved selection on logout
                   navigate('/login')
                 }}
                 className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
@@ -445,8 +456,8 @@ const handleDeleteMessage = (messageId) => {
       </nav>
 
       {/* Main Content - Full height on mobile */}
-<div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6 h-[calc(100dvh-56px)] sm:h-auto">
-  <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 h-full lg:h-auto">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6 h-[calc(100dvh-56px)] sm:h-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 h-full lg:h-auto">
           {/* Sidebar - Mobile Overlay */}
           <AnimatePresence>
             {sidebarOpen && (
@@ -613,86 +624,86 @@ const handleDeleteMessage = (messageId) => {
                   </div>
                 </div>
 
-{/* Messages */}
-<div className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0">
-  {messages.map((msg, index) => {
-    const senderId = normalizeSender(msg.sender)
-    const isMyMessage = String(senderId) === String(user?._id)
-    const isDeleted = msg.deleted === true
-    const hasReply = msg.replyTo || msg.replyToText
-    const replySenderName = msg.replyToSender?.name || 'Someone'
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0">
+                  {messages.map((msg, index) => {
+                    const senderId = normalizeSender(msg.sender)
+                    const isMyMessage = String(senderId) === String(user?._id)
+                    const isDeleted = msg.deleted === true
+                    const hasReply = msg.replyTo || msg.replyToText
+                    const replySenderName = msg.replyToSender?.name || 'Someone'
 
-    return (
-      <div key={index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
-        {/* ✅ No overflow-hidden on the bubble */}
-        <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
-         isMyMessage
-        ? `bg-gradient-to-r ${theme.button} text-white`
-            : isDark
-              ? 'bg-white/10 border border-white/20 text-white'
-              : 'bg-gray-100 text-gray-800'
-        }`}>
-          {isDeleted ? (
-            <div className="flex items-center gap-2">
-              <span className="text-sm italic opacity-60">
-                {isMyMessage 
-  ? 'You deleted this message' 
-  : `${selectedUser?.name || 'Someone'} deleted a message`}
-              </span>
-            </div>
-          ) : (
-            <>
-              {hasReply && (
-                <div className={`mb-1.5 pl-2 border-l-2 ${isMyMessage ? 'border-white/50' : 'border-gray-400 dark:border-gray-500'} text-xs opacity-70`}>
-                  <span className="font-medium">
-                    {replySenderName}:
-                  </span>
-                  <span className="ml-1 italic truncate block max-w-[200px]">
-                    {msg.replyToText || 'Reply to message'}
-                  </span>
+                    return (
+                      <div key={index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
+                          isMyMessage
+                            ? `bg-gradient-to-r ${theme.button} text-white`
+                            : isDark
+                              ? 'bg-white/10 border border-white/20 text-white'
+                              : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {isDeleted ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm italic opacity-60">
+                                {isMyMessage 
+                                  ? 'You deleted this message' 
+                                  : `${selectedUser?.name || 'Someone'} deleted a message`}
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              {hasReply && (
+                                <div className={`mb-1.5 pl-2 border-l-2 ${isMyMessage ? 'border-white/50' : 'border-gray-400 dark:border-gray-500'} text-xs opacity-70`}>
+                                  <span className="font-medium">
+                                    {replySenderName}:
+                                  </span>
+                                  <span className="ml-1 italic truncate block max-w-[200px]">
+                                    {msg.replyToText || 'Reply to message'}
+                                  </span>
+                                </div>
+                              )}
+
+                              {msg.image && (
+                                <img
+                                  src={msg.image}
+                                  alt="Shared"
+                                  className="max-w-full rounded-lg mb-1 sm:mb-2 cursor-pointer hover:opacity-90 transition"
+                                  onClick={() => setSelectedImage(msg.image)}
+                                />
+                              )}
+                              {msg.text && <p className="text-sm sm:text-base break-words">{msg.text}</p>}
+                              
+                              <span className="text-[9px] sm:text-[10px] opacity-70 mt-0.5 sm:mt-1 flex items-center gap-1">
+                                {new Date(msg.createdAt).toLocaleTimeString()}
+                                {isMyMessage && <MessageStatus status={msg.status || 'sent'} />}
+                              </span>
+
+                              {/* Reactions */}
+                              <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
+                                <MessageReactions
+                                  messageId={msg._id}
+                                  reactions={msg.reactions}
+                                  currentUserId={user._id}
+                                  onReact={handleReaction}
+                                  isMyMessage={isMyMessage}
+                                />
+                                <MessageMenu
+                                  messageId={msg._id}
+                                  isMyMessage={isMyMessage}
+                                  onDelete={handleDeleteMessage}
+                                  onCopy={() => handleCopyMessage(msg.text)}
+                                  onReply={() => handleReply(msg)}
+                                />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
-              )}
 
-              {msg.image && (
-                <img
-                  src={msg.image}
-                  alt="Shared"
-                  className="max-w-full rounded-lg mb-1 sm:mb-2 cursor-pointer hover:opacity-90 transition"
-                  onClick={() => setSelectedImage(msg.image)}
-                />
-              )}
-              {msg.text && <p className="text-sm sm:text-base break-words">{msg.text}</p>}
-              
-              <span className="text-[9px] sm:text-[10px] opacity-70 mt-0.5 sm:mt-1 flex items-center gap-1">
-                {new Date(msg.createdAt).toLocaleTimeString()}
-                {isMyMessage && <MessageStatus status={msg.status || 'sent'} />}
-              </span>
-
-              {/* ✅ Reactions - properly positioned, no overflow */}
-              <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
-                <MessageReactions
-                  messageId={msg._id}
-                  reactions={msg.reactions}
-                  currentUserId={user._id}
-                  onReact={handleReaction}
-                  isMyMessage={isMyMessage}
-                />
-                <MessageMenu
-                  messageId={msg._id}
-                  isMyMessage={isMyMessage}
-                  onDelete={handleDeleteMessage}
-                  onCopy={() => handleCopyMessage(msg.text)}
-                  onReply={() => handleReply(msg)}
-                />
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    )
-  })}
-  <div ref={messagesEndRef} />
-</div>
                 {/* Reply Preview */}
                 {replyToMessage && (
                   <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center gap-2 border-l-4 border-blue-500">
@@ -787,14 +798,14 @@ const handleDeleteMessage = (messageId) => {
         />
       )}
       {showProfile && (
-  <ProfileModal
-    user={user}
-    onClose={() => setShowProfile(false)}
-    onSaved={(updatedUser) => setUser(updatedUser)}
-    theme={theme}
-    isDark={isDark}
-  />
-)}
+        <ProfileModal
+          user={user}
+          onClose={() => setShowProfile(false)}
+          onSaved={(updatedUser) => setUser(updatedUser)}
+          theme={theme}
+          isDark={isDark}
+        />
+      )}
     </div>
   )
 }
