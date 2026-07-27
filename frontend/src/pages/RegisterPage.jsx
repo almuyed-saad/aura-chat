@@ -19,6 +19,7 @@ const RegisterPage = () => {
      const response = await axios.post(`${API_URL}/api/auth/register`, { name, email, password })
       localStorage.setItem('token', response.data.token)
       localStorage.setItem('user', JSON.stringify(response.data.user))
+      window.dispatchEvent(new Event('authChanged'))
       toast.success('Account created! 🎉')
       navigate('/')
     } catch (error) {

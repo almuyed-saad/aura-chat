@@ -18,6 +18,7 @@ const LoginPage = () => {
       const response = await axios.post(`${API_URL}/api/auth/login`, { email, password })
       localStorage.setItem('token', response.data.token)
       localStorage.setItem('user', JSON.stringify(response.data.user))
+      window.dispatchEvent(new Event('authChanged'))
       toast.success('Welcome back! 🎉')
       navigate('/')
     } catch (error) {
