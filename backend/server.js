@@ -12,6 +12,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const { sendPushToUser } = require('./services/pushSender');
+const User = require('./models/User');
 
 // ===== INITIALIZE APP =====
 const app = express();
@@ -20,24 +21,21 @@ const server = http.createServer(app);
 // ===== SOCKET.IO SETUP =====
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "https://aura-chat-topaz.vercel.app"],
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
 // ===== MIDDLEWARE =====
-// ✅ Allow both localhost AND your live Vercel URL
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://aura-chat-topaz.vercel.app' // Your Vercel URL (we'll update this after deploy)
+  'https://aura-chat-topaz.vercel.app'
 ];
 
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -71,6 +69,8 @@ const connectDB = async () => {
       connectTimeoutMS: 30000,
     });
     console.log('✅ Connected to MongoDB');
+    await User.updateMany({}, { online: false });
+    console.log('🧹 Reset all users to offline on server start');
   } catch (err) {
     console.error('❌ MongoDB connection error:', err.message);
     console.log('🔄 Retrying in 5 seconds...');
@@ -81,7 +81,7 @@ const connectDB = async () => {
 connectDB();
 
 // ===== MODELS =====
-const User = require('./models/User');
+// ===== MODELS =====
 const Message = require('./models/Message');
 
 // ===== SOCKET STORE =====
@@ -181,15 +181,18 @@ io.on('connection', (socket) => {
       // ✅ Send to receiver
       io.to(receiverId).emit('receiveMessage', messageToSend);
       io.to(socket.id).emit('receiveMessage', messageToSend);
+      
+      // ✅ Send push notification if receiver is offline
       if (!userSocketMap.has(receiverId)) {
-  const senderUser = await User.findById(socket.userId).select('name');
-  sendPushToUser(receiverId, {
-    title: senderUser?.name || 'New message',
-    body: text ? text.slice(0, 100) : (image ? '📷 Sent an image' : 'Sent a message'),
-    senderId: socket.userId,
-    url: '/'
-  }).catch(err => console.error('❌ Push trigger failed:', err));
-}
+        const senderUser = await User.findById(socket.userId).select('name');
+        sendPushToUser(receiverId, {
+          title: senderUser?.name || 'New message',
+          body: text ? text.slice(0, 100) : (image ? '📷 Sent an image' : 'Sent a message'),
+          senderId: socket.userId,
+          url: '/'
+        }).catch(err => console.error('❌ Push trigger failed:', err));
+      }
+      
       console.log('📤 Message emitted to receiver:', receiverId);
 
       // ✅ Count unread messages from THIS sender only
@@ -339,7 +342,6 @@ io.on('connection', (socket) => {
     try {
       console.log('📖 markAsRead from:', socket.userId, 'for sender:', senderId);
       
-      // ✅ Find unread messages from this sender
       const unreadMessages = await Message.find({
         sender: senderId,
         receiver: socket.userId,
@@ -349,7 +351,6 @@ io.on('connection', (socket) => {
       if (unreadMessages.length > 0) {
         const messageIds = unreadMessages.map(m => m._id);
         
-        // ✅ Update status to 'read'
         await Message.updateMany(
           { _id: { $in: messageIds } },
           { 
@@ -359,7 +360,6 @@ io.on('connection', (socket) => {
           }
         );
 
-        // ✅ Notify sender which messages were read
         io.to(senderId).emit('messagesRead', {
           readerId: socket.userId,
           messageIds: messageIds.map(id => id.toString())
@@ -368,7 +368,6 @@ io.on('connection', (socket) => {
         console.log(`✅ Marked ${messageIds.length} messages as read from ${senderId}`);
       }
       
-      // ✅ Clear unread count for this sender
       socket.emit('unreadCount', { 
         senderId: senderId, 
         count: 0 
@@ -390,9 +389,11 @@ io.on('connection', (socket) => {
 
       const onlineUsers = await User.find({ online: true }).select('_id name');
       console.log('📡 Online users:', onlineUsers.map(u => u.name));
+      
+      // ✅ FIX: Broadcast to ALL users (not just the one who connected)
       io.emit('getOnlineUsers', onlineUsers);
 
-      // ✅ Auto-upgrade any pending "sent" messages to "delivered"
+      // ✅ Auto-upgrade pending messages to "delivered"
       const pendingMessages = await Message.find({
         receiver: socket.userId,
         status: 'sent'
@@ -405,7 +406,6 @@ io.on('connection', (socket) => {
           { status: 'delivered', deliveredAt: new Date() }
         );
 
-        // ✅ Group by sender so each sender only gets their own message IDs
         const bySender = {};
         pendingMessages.forEach(m => {
           const sId = m.sender.toString();
@@ -438,6 +438,8 @@ io.on('connection', (socket) => {
       });
       
       const onlineUsers = await User.find({ online: true }).select('_id name');
+      
+      // ✅ FIX: Broadcast to ALL users (not just the one who disconnected)
       io.emit('getOnlineUsers', onlineUsers);
       console.log('📡 Updated online users after disconnect');
       
