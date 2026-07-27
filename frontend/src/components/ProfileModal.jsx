@@ -10,10 +10,6 @@ import { API_URL } from '../config'
 // Lets the user pick one of 10 preset avatars and set a nickname shown in chat.
 // Saves to the database (not just localStorage) so it survives refresh/logout.
 const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
-
-// Lets the user pick one of 10 preset avatars and set a nickname shown in chat.
-// Saves to the database (not just localStorage) so it survives refresh/logout.
-const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
   const [nickname, setNickname] = useState(user?.name || '')
   const [selectedAvatar, setSelectedAvatar] = useState(user?.avatar || '')
   const [saving, setSaving] = useState(false)
