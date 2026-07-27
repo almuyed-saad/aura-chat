@@ -444,10 +444,9 @@ const handleDeleteMessage = (messageId) => {
         </div>
       </nav>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 relative">
-
+      {/* Main Content - Full height on mobile */}
+<div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6 h-[calc(100vh-64px)] sm:h-auto">
+  <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 h-full lg:h-auto">
           {/* Sidebar - Mobile Overlay */}
           <AnimatePresence>
             {sidebarOpen && (
@@ -597,8 +596,8 @@ const handleDeleteMessage = (messageId) => {
             )}
           </div>
 
-          {/* Chat Window */}
-          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col min-h-[60vh] sm:min-h-[500px] transition-colors duration-500`}>
+          {/* Chat Window - Full height on mobile with input at bottom */}
+          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-[calc(100vh-120px)] sm:min-h-[500px] transition-colors duration-500`}>
             {selectedUser ? (
               <>
                 {/* Chat Header */}
