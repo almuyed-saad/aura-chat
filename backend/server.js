@@ -30,7 +30,7 @@ const io = new Server(server, {
 // ✅ Allow both localhost AND your live Vercel URL
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://aura-chat.vercel.app'  // Your Vercel URL (we'll update this after deploy)
+  'https://aura-chat-topaz.vercel.app' // Your Vercel URL (we'll update this after deploy)
 ];
 
 app.use(cors({
