@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react'
 import io from 'socket.io-client'
+import { SOCKET_URL } from '../config'
 
 const SocketContext = createContext()
 
@@ -113,7 +114,7 @@ const socketInstance = io(SOCKET_URL, {
   const fetchUnreadCounts = async (socketInstance) => {
     try {
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:5000/api/messages/unread/count', {
+      const response = await fetch(`${API_URL}/api/messages/unread/count`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

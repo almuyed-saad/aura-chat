@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react'
+import { API_URL } from '../config'
 
-const API_URL = 'http://localhost:5000'
+const API_URL = `${API_URL}/api/push/subscribe`
 
 const VAPID_PUBLIC_KEY = 'BMBSOYrxtcg6jmxYBdVAwKlY9IPVfZ-fflePibP3apHwsWvLQanT0wEh9YowCVIwOrqdIci2P67LEaxFG794Maw'
 

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
+import { API_URL } from '../config'  // ✅ ADD THIS
 
 const RegisterPage = () => {
   const [name, setName] = useState('')
@@ -15,7 +16,7 @@ const RegisterPage = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/register', { name, email, password })
+     const response = await axios.post(`${API_URL}/api/auth/register`, { name, email, password })
       localStorage.setItem('token', response.data.token)
       localStorage.setItem('user', JSON.stringify(response.data.user))
       toast.success('Account created! 🎉')
