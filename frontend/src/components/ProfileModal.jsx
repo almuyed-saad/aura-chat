@@ -7,7 +7,9 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { API_URL } from '../config'
 
-const API_URL = `${API_URL}/api/users/profile`
+// Lets the user pick one of 10 preset avatars and set a nickname shown in chat.
+// Saves to the database (not just localStorage) so it survives refresh/logout.
+const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
 
 // Lets the user pick one of 10 preset avatars and set a nickname shown in chat.
 // Saves to the database (not just localStorage) so it survives refresh/logout.
