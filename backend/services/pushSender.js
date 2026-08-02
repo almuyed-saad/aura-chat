@@ -2,12 +2,8 @@ const webpush = require('web-push');
 const PushSubscription = require('../models/PushSubscription');
 
 // ===== VAPID SETUP =====
-// Generate these ONCE with: npx web-push generate-vapid-keys
-// Then put them in your .env file (never commit them to git):
-//   VAPID_PUBLIC_KEY=...
-//   VAPID_PRIVATE_KEY=...
 webpush.setVapidDetails(
-  'mailto:you@example.com', // any contact email/URL, required by the push spec
+  'mailto:you@example.com',
   process.env.VAPID_PUBLIC_KEY,
   process.env.VAPID_PRIVATE_KEY
 );
@@ -20,7 +16,10 @@ webpush.setVapidDetails(
  */
 async function sendPushToUser(userId, { title, body, senderId, url }) {
   const subscriptions = await PushSubscription.find({ user: userId });
-  if (subscriptions.length === 0) return;
+  if (subscriptions.length === 0) {
+    console.log('ℹ️ No push subscriptions found for user:', userId);
+    return;
+  }
 
   const payload = JSON.stringify({ title, body, senderId, url });
 
@@ -31,13 +30,22 @@ async function sendPushToUser(userId, { title, body, senderId, url }) {
           { endpoint: sub.endpoint, keys: sub.keys },
           payload
         );
+        console.log('✅ Push sent successfully to:', sub.endpoint.slice(0, 50) + '...');
       } catch (error) {
-        // 410 Gone / 404 = the subscription is dead, remove it
+        // ✅ FULL error logging - previously only logged error.message,
+        // which just showed the vague "Received unexpected response code"
+        // over and over with no way to know the actual reason. This prints
+        // everything the push service actually told us back.
+        console.error('❌ Push send FAILED - full details:');
+        console.error('  statusCode:', error.statusCode);
+        console.error('  message:', error.message);
+        console.error('  body:', error.body);
+        console.error('  headers:', JSON.stringify(error.headers));
+        console.error('  endpoint:', sub.endpoint);
+
         if (error.statusCode === 410 || error.statusCode === 404) {
           await PushSubscription.deleteOne({ _id: sub._id });
           console.log('🧹 Removed dead push subscription for user:', userId);
-        } else {
-          console.error('❌ Push send error:', error.message);
         }
       }
     })
