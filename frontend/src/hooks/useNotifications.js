@@ -19,6 +19,12 @@ function urlBase64ToUint8Array(base64String) {
 // browsers allow subscribing silently if permission is already granted,
 // no fresh user click required for that part.
 async function subscribeAndSave() {
+  const token = localStorage.getItem('token')
+  if (!token) {
+    console.log('🔕 Skipping push subscribe - not logged in')
+    return false
+  }
+
   try {
     const registration = await navigator.serviceWorker.ready
 
@@ -30,8 +36,7 @@ async function subscribeAndSave() {
       })
     }
 
-    const token = localStorage.getItem('token')
-    await fetch(`${API_URL}/api/push/subscribe`, {
+    const response = await fetch(`${API_URL}/api/push/subscribe`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -39,6 +44,14 @@ async function subscribeAndSave() {
       },
       body: JSON.stringify(subscription.toJSON())
     })
+
+    // ✅ fetch() does NOT throw on 401/403/500 - only on network failures.
+    // Without this check, a rejected request still logged "success" before.
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error('❌ Push subscribe request failed:', response.status, errorText)
+      return false
+    }
 
     console.log('✅ Push subscription saved')
     return true
