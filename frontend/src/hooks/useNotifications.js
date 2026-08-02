@@ -1,7 +1,7 @@
 import { useEffect, useCallback } from 'react'
 import { API_URL } from '../config'
 
-const VAPID_PUBLIC_KEY = 'BMBSOYrxtcg6jmxYBdVAwKlY9IPVfZ-fflePibP3apHwsWvLQanT0wEh9YowCVIwOrqdIci2P67LEaxFG794Maw'
+const VAPID_PUBLIC_KEY = 'BGQWfUUj9JMFkTuiswqbjf3iDQKdD88Ppe7YsuYDmPI6IJ_Fm8ilGv01wGrnIFQ9H9EKm6i2zFD7ntBxZhFVj4E'
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
