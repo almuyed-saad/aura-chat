@@ -17,6 +17,14 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
+// 🔍 TEMPORARY DEBUG - remove once the upload issue is confirmed fixed.
+// Prints lengths/values that are safe to see in logs (not the actual secret)
+// so we can catch a truncated/corrupted env var without re-exposing credentials.
+console.log('🔍 Debug — Cloud Name value:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('🔍 Debug — API Key length:', process.env.CLOUDINARY_API_KEY?.length, '(expected 15)');
+console.log('🔍 Debug — API Secret length:', process.env.CLOUDINARY_API_SECRET?.length, '(expected 27)');
+console.log('🔍 Debug — Cloud Name length:', process.env.CLOUDINARY_CLOUD_NAME?.length, '(expected 8)');
+
 // ===== STORAGE CONFIG =====
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
