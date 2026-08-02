@@ -23,45 +23,64 @@ const storage = new CloudinaryStorage({
   params: {
     folder: 'chateau-images',
     allowed_formats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-    transformation: [{ 
-      width: 800, 
-      height: 800, 
+    transformation: [{
+      width: 800,
+      height: 800,
       crop: 'limit',
       quality: 'auto'
     }]
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
 // ===== UPLOAD IMAGE =====
-router.post('/image', auth, upload.single('image'), async (req, res) => {
-  try {
-    console.log('📤 Upload request received');
-    
-    if (!req.file) {
-      console.log('❌ No file in request');
-      return res.status(400).json({ error: 'No image uploaded' });
+// ✅ FIX: multer is now called manually with an explicit error callback,
+// instead of as chained middleware (`upload.single('image')` directly in
+// the route). Errors thrown DURING the Cloudinary upload happen inside
+// multer's middleware step, which runs BEFORE this handler's try/catch
+// ever starts - so they were previously invisible, never logged, and
+// Express just returned a bare 500 with no details. This wrapper catches
+// that error explicitly so we can finally see what's actually failing.
+router.post('/image', auth, (req, res) => {
+  upload.single('image')(req, res, async (err) => {
+    if (err) {
+      console.error('❌ Multer/Cloudinary upload error:', err);
+      console.error('  Name:', err.name);
+      console.error('  Message:', err.message);
+      if (err.http_code) console.error('  Cloudinary HTTP code:', err.http_code);
+      return res.status(500).json({
+        error: 'Upload failed',
+        details: err.message
+      });
     }
 
-    console.log('✅ File uploaded to Cloudinary:', req.file.path);
+    try {
+      console.log('📤 Upload request received');
 
-    res.json({
-      imageUrl: req.file.path,
-      imagePublicId: req.file.filename
-    });
-  } catch (error) {
-    console.error('❌ Upload error details:', error);
-    console.error('  Message:', error.message);
-    console.error('  Stack:', error.stack);
-    res.status(500).json({ 
-      error: 'Upload failed',
-      details: error.message 
-    });
-  }
+      if (!req.file) {
+        console.log('❌ No file in request');
+        return res.status(400).json({ error: 'No image uploaded' });
+      }
+
+      console.log('✅ File uploaded to Cloudinary:', req.file.path);
+
+      res.json({
+        imageUrl: req.file.path,
+        imagePublicId: req.file.filename
+      });
+    } catch (error) {
+      console.error('❌ Upload error details:', error);
+      console.error('  Message:', error.message);
+      res.status(500).json({
+        error: 'Upload failed',
+        details: error.message
+      });
+    }
+  });
 });
 
 module.exports = router;
