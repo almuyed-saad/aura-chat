@@ -3,7 +3,15 @@ import { FiImage, FiX } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
+// ✅ Uploads directly to Cloudinary from the browser - Render is no longer
+// involved in this step at all, which is what fixes the 403 (Render's
+// outbound IP was being blocked by Cloudinary; this bypasses that entirely).
+// Only the public cloud name + unsigned preset name are used - no secret
+// key is ever exposed in frontend code, this is Cloudinary's standard
+// supported pattern for direct browser uploads.
+const CLOUDINARY_CLOUD_NAME = 'ssw708f4'
+const CLOUDINARY_UPLOAD_PRESET = 'aura_unsigned'
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
 
 const ImageUpload = ({ onImageUpload, disabled }) => {
   const [uploading, setUploading] = useState(false)
@@ -29,18 +37,20 @@ const ImageUpload = ({ onImageUpload, disabled }) => {
     setUploading(true)
 
     const formData = new FormData()
-    formData.append('image', file)
+    formData.append('file', file)
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET)
 
     try {
-      const token = localStorage.getItem('token')
-      const response = await axios.post(`${API_URL}/api/upload/image`, formData, {
+      // Direct call to Cloudinary - no Authorization header needed here,
+      // since this isn't hitting our own backend at all
+      const response = await axios.post(CLOUDINARY_UPLOAD_URL, formData, {
         headers: {
-          'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`
+          'Content-Type': 'multipart/form-data'
         }
       })
 
-      onImageUpload(response.data.imageUrl, response.data.imagePublicId)
+      // Cloudinary's response shape: secure_url + public_id
+      onImageUpload(response.data.secure_url, response.data.public_id)
       toast.success('Image uploaded!')
     } catch (error) {
       console.error('Upload error:', error)
