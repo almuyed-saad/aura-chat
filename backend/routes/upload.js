@@ -56,13 +56,15 @@ const upload = multer({
 router.post('/image', auth, (req, res) => {
   upload.single('image')(req, res, async (err) => {
     if (err) {
-      console.error('❌ Multer/Cloudinary upload error:', err);
-      console.error('  Name:', err.name);
-      console.error('  Message:', err.message);
-      if (err.http_code) console.error('  Cloudinary HTTP code:', err.http_code);
+      // Log the ENTIRE raw error object, unfiltered - Cloudinary's SDK
+      // often nests the real reason in fields we weren't printing before
+      // (e.g. err.error.message), so a partial log was hiding the actual cause.
+      console.error('❌ FULL Cloudinary/Multer error object:');
+      console.error(JSON.stringify(err, Object.getOwnPropertyNames(err), 2));
       return res.status(500).json({
         error: 'Upload failed',
-        details: err.message
+        details: err.message,
+        fullError: JSON.parse(JSON.stringify(err, Object.getOwnPropertyNames(err)))
       });
     }
 
