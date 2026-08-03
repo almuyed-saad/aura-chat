@@ -71,6 +71,16 @@ const ChatPage = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+  const handlePopState = () => {
+    if (selectedUser) {
+      setSelectedUser(null)
+    }
+  }
+  window.addEventListener('popstate', handlePopState)
+  return () => window.removeEventListener('popstate', handlePopState)
+}, [selectedUser])
+
   // Check auth
   useEffect(() => {
     if (!token) {
@@ -313,21 +323,22 @@ const ChatPage = () => {
     setReplyToMessage(null)
   }
 
-  // ✅ SELECT USER - Persist to localStorage
-  const selectUser = (chatUser) => {
-    setSelectedUser(chatUser)
-    localStorage.setItem('selectedUserId', chatUser._id)  // ✅ Save selection
-    
-    if (unreadCounts[chatUser._id] > 0) {
-      clearUnreadCount(chatUser._id)
-      socket?.emit('markAsRead', { senderId: chatUser._id })
-      console.log('📤 markAsRead emitted for:', chatUser.name)
-    }
-    
-    if (window.innerWidth < 1024) {
-      setSidebarOpen(false)
-    }
+// ✅ SELECT USER - Persist to localStorage
+const selectUser = (chatUser) => {
+  setSelectedUser(chatUser)
+  window.history.pushState({ chatOpen: true }, '')
+  localStorage.setItem('selectedUserId', chatUser._id)  // ✅ Save selection
+  
+  if (unreadCounts[chatUser._id] > 0) {
+    clearUnreadCount(chatUser._id)
+    socket?.emit('markAsRead', { senderId: chatUser._id })
+    console.log('📤 markAsRead emitted for:', chatUser.name)
   }
+  
+  if (window.innerWidth < 1024) {
+    setSidebarOpen(false)
+  }
+}
 
   const sendMessage = async (e) => {
     e.preventDefault()
