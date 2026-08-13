@@ -10,15 +10,12 @@ import MessageMenu from '../components/MessageMenu'
 import MessageStatus from '../components/MessageStatus'
 import { useTheme } from '../context/ThemeContext'
 import { useSocket } from '../context/SocketContext'
-import axios from 'axios'
+import apiClient from '../api/client'  // ✅ NEW
 import toast from 'react-hot-toast'
 import { useNotifications } from '../hooks/useNotifications'
 import NotificationBanner from '../components/NotificationBanner'
 import ProfileModal from '../components/ProfileModal'
 import Avatar from '../components/Avatar'
-
-// ✅ Use environment variable for production, fallback to localhost for development
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000'
 
 // Helper: Normalize reactions to a plain object { userId: emoji }.
 const normalizeReactions = (reactions) => {
@@ -71,35 +68,66 @@ const ChatPage = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  useEffect(() => {
-  const handlePopState = () => {
-    if (selectedUser) {
-      setSelectedUser(null)
-    }
-  }
-  window.addEventListener('popstate', handlePopState)
-  return () => window.removeEventListener('popstate', handlePopState)
-}, [selectedUser])
-
-  // Check auth
+  // ✅ Check auth with token expiry
   useEffect(() => {
     if (!token) {
       navigate('/login')
       return
     }
+
+    // ✅ Check if token is expired
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]))
+      const expiryTime = payload.exp * 1000
+      
+      if (expiryTime < Date.now()) {
+        console.log('⏰ Token expired, logging out...')
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        localStorage.removeItem('selectedUserId')
+        toast.error('Session expired. Please login again.')
+        navigate('/login')
+        return
+      }
+
+      // ✅ Auto-refresh token 5 minutes before expiry
+      const timeUntilExpiry = expiryTime - Date.now()
+      const refreshThreshold = 5 * 60 * 1000 // 5 minutes
+
+      if (timeUntilExpiry > 0 && timeUntilExpiry < refreshThreshold) {
+        console.log('🔄 Token expiring soon...')
+        toast.warning('Your session will expire soon.')
+      }
+    } catch (error) {
+      console.error('❌ Token decode error:', error)
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      navigate('/login')
+      return
+    }
+
     const userData = JSON.parse(localStorage.getItem('user') || '{}')
     setUser(normalizeUser(userData))
-  }, [navigate])
+  }, [navigate, token])
 
-  // Fetch all users & restore selected conversation
+  // ✅ Handle browser back button
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selectedUser) {
+        setSelectedUser(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [selectedUser])
+
+  // ✅ Fetch all users & restore selected conversation
   useEffect(() => {
     const fetchUsers = async () => {
       if (!token) return
       setLoading(true)
       try {
-        const response = await axios.get(`${API_URL}/api/users`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        const response = await apiClient.get('/api/users')
         setUsers(response.data)
 
         // ✅ Restore previously selected conversation after refresh
@@ -112,23 +140,28 @@ const ChatPage = () => {
         }
       } catch (error) {
         console.error('Error fetching users:', error)
-        toast.error('Failed to load users')
+        if (error.response?.status === 401) {
+          toast.error('Session expired. Please login again.')
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          navigate('/login')
+        } else {
+          toast.error('Failed to load users')
+        }
       } finally {
         setLoading(false)
       }
     }
     fetchUsers()
-  }, [token])
+  }, [token, navigate])
 
-  // Fetch messages when a user is selected
+  // ✅ Fetch messages when a user is selected
   useEffect(() => {
     if (!selectedUser || !token) return
 
     const fetchMessages = async () => {
       try {
-        const response = await axios.get(`${API_URL}/api/messages/${selectedUser._id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        const response = await apiClient.get(`/api/messages/${selectedUser._id}`)
         const normalized = response.data.map(msg => ({
           ...msg,
           sender: normalizeSender(msg.sender),
@@ -323,22 +356,22 @@ const ChatPage = () => {
     setReplyToMessage(null)
   }
 
-// ✅ SELECT USER - Persist to localStorage
-const selectUser = (chatUser) => {
-  setSelectedUser(chatUser)
-  window.history.pushState({ chatOpen: true }, '')
-  localStorage.setItem('selectedUserId', chatUser._id)  // ✅ Save selection
-  
-  if (unreadCounts[chatUser._id] > 0) {
-    clearUnreadCount(chatUser._id)
-    socket?.emit('markAsRead', { senderId: chatUser._id })
-    console.log('📤 markAsRead emitted for:', chatUser.name)
+  // ✅ SELECT USER - Persist to localStorage
+  const selectUser = (chatUser) => {
+    setSelectedUser(chatUser)
+    window.history.pushState({ chatOpen: true }, '')
+    localStorage.setItem('selectedUserId', chatUser._id)
+    
+    if (unreadCounts[chatUser._id] > 0) {
+      clearUnreadCount(chatUser._id)
+      socket?.emit('markAsRead', { senderId: chatUser._id })
+      console.log('📤 markAsRead emitted for:', chatUser.name)
+    }
+    
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
   }
-  
-  if (window.innerWidth < 1024) {
-    setSidebarOpen(false)
-  }
-}
 
   const sendMessage = async (e) => {
     e.preventDefault()
@@ -453,7 +486,7 @@ const selectUser = (chatUser) => {
                 onClick={() => {
                   localStorage.removeItem('token')
                   localStorage.removeItem('user')
-                  localStorage.removeItem('selectedUserId')  // ✅ Clear saved selection on logout
+                  localStorage.removeItem('selectedUserId')
                   navigate('/login')
                 }}
                 className="flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"

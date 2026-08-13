@@ -4,6 +4,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 import { API_URL } from '../config'
+import apiClient from '../api/client'
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -15,7 +16,7 @@ const LoginPage = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      const response = await axios.post(`${API_URL}/api/auth/login`, { email, password })
+      const response = await apiClient.post('/api/auth/login', { email, password })
       localStorage.setItem('token', response.data.token)
       localStorage.setItem('user', JSON.stringify(response.data.user))
       window.dispatchEvent(new Event('authChanged'))
