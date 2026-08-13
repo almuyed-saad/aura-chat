@@ -54,12 +54,10 @@ const ChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
-  // ✅ Scroll indicator states
+  // ✅ Scroll indicator states - SIMPLE VERSION
   const [scrollPercentage, setScrollPercentage] = useState(0)
-  const [isDragging, setIsDragging] = useState(false)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const scrollContainerRef = useRef(null)
-  const scrollTrackRef = useRef(null)
   const { theme } = useTheme()
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
   const messagesEndRef = useRef(null)
@@ -182,39 +180,6 @@ const ChatPage = () => {
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [selectedUser])
-
-  // ✅ Update scroll percentage when scrolling
-  useEffect(() => {
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    const updateScrollPercentage = () => {
-      if (isDragging) return
-      
-      const { scrollTop, scrollHeight, clientHeight } = container
-      const maxScroll = scrollHeight - clientHeight
-      const percentage = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0
-      setScrollPercentage(percentage)
-      
-      // Check if at bottom
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
-      setIsAtBottom(isAtBottom)
-    }
-
-    container.addEventListener('scroll', updateScrollPercentage)
-    
-    // Initial update
-    setTimeout(updateScrollPercentage, 100)
-    
-    return () => container.removeEventListener('scroll', updateScrollPercentage)
-  }, [messages, selectedUser, isDragging])
-
-  // ✅ Scroll to bottom on new messages ONLY if already at bottom
-  useEffect(() => {
-    if (messages.length > 0 && isAtBottom && !isDragging) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
-  }, [messages, isAtBottom, isDragging])
 
   // ✅ Listen for incoming messages
   useEffect(() => {
@@ -383,84 +348,6 @@ const ChatPage = () => {
   const cancelReply = () => {
     setReplyToMessage(null)
   }
-
-  // ✅ Scroll functions
-  const scrollToPercentage = (percentage) => {
-    const container = scrollContainerRef.current
-    if (!container) return
-    
-    const { scrollHeight, clientHeight } = container
-    const maxScroll = scrollHeight - clientHeight
-    const targetScroll = (percentage / 100) * maxScroll
-    
-    container.scrollTo({ 
-      top: targetScroll, 
-      behavior: isDragging ? 'auto' : 'smooth'
-    })
-  }
-
-  // ✅ Handle drag on scroll indicator
-  const handleDragStart = (e) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragMove = (e) => {
-    if (!isDragging || !scrollTrackRef.current || !scrollContainerRef.current) return
-    
-    const rect = scrollTrackRef.current.getBoundingClientRect()
-    const clientY = e.clientY || e.touches?.[0]?.clientY || 0
-    const y = Math.max(0, Math.min(rect.height, clientY - rect.top))
-    const percentage = (y / rect.height) * 100
-    
-    setScrollPercentage(percentage)
-    
-    // ✅ Directly scroll the container
-    const container = scrollContainerRef.current
-    const { scrollHeight, clientHeight } = container
-    const maxScroll = scrollHeight - clientHeight
-    const targetScroll = (percentage / 100) * maxScroll
-    container.scrollTop = targetScroll
-  }
-
-  const handleDragEnd = () => {
-    setIsDragging(false)
-  }
-
-  // ✅ Click on track to jump to position
-  const handleTrackClick = (e) => {
-    if (!scrollTrackRef.current || !scrollContainerRef.current) return
-    
-    const rect = scrollTrackRef.current.getBoundingClientRect()
-    const clientY = e.clientY || e.touches?.[0]?.clientY || 0
-    const y = Math.max(0, Math.min(rect.height, clientY - rect.top))
-    const percentage = (y / rect.height) * 100
-    
-    setScrollPercentage(percentage)
-    scrollToPercentage(percentage)
-  }
-
-  // ✅ Add drag listeners
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleDragMove)
-      document.addEventListener('mouseup', handleDragEnd)
-      document.addEventListener('touchmove', handleDragMove, { passive: false })
-      document.addEventListener('touchend', handleDragEnd)
-    } else {
-      document.removeEventListener('mousemove', handleDragMove)
-      document.removeEventListener('mouseup', handleDragEnd)
-      document.removeEventListener('touchmove', handleDragMove)
-      document.removeEventListener('touchend', handleDragEnd)
-    }
-    
-    return () => {
-      document.removeEventListener('mousemove', handleDragMove)
-      document.removeEventListener('mouseup', handleDragEnd)
-      document.removeEventListener('touchmove', handleDragMove)
-      document.removeEventListener('touchend', handleDragEnd)
-    }
-  }, [isDragging])
 
   // ✅ SELECT USER - Persist to localStorage
   const selectUser = (chatUser) => {
@@ -774,41 +661,38 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* ✅ Messages Container with Scroll Indicator */}
+                {/* ✅ Messages Container with Simple Scroll Indicator */}
                 <div className="relative flex-1 min-h-0">
-                  {/* ✅ Scroll Indicator */}
-                  <div className="absolute right-0 top-0 bottom-0 w-4 sm:w-5 flex items-center pointer-events-none z-10">
-                    <div
-                      ref={scrollTrackRef}
-                      className="relative w-1 sm:w-1.5 h-[80%] bg-gray-300 dark:bg-gray-600 rounded-full pointer-events-auto cursor-pointer"
-                      onClick={handleTrackClick}
-                    >
+                  {/* ✅ Simple Scroll Indicator - Visual only, no interaction */}
+                  <div className="absolute right-0 top-0 bottom-0 w-3 sm:w-4 flex items-center pointer-events-none z-10">
+                    <div className="relative w-1 h-[80%] bg-gray-300 dark:bg-gray-600 rounded-full">
                       {/* Scroll Indicator Thumb */}
                       <div
-                        className="absolute left-1/2 -translate-x-1/2 w-4 sm:w-5 h-5 sm:h-6 bg-primary-500 dark:bg-primary-400 rounded-full shadow-lg cursor-grab active:cursor-grabbing pointer-events-auto transition-none"
+                        className="absolute left-1/2 -translate-x-1/2 w-3 sm:w-4 h-5 sm:h-6 bg-primary-500 dark:bg-primary-400 rounded-full transition-all duration-75"
                         style={{
                           top: `calc(${Math.max(0, Math.min(100, scrollPercentage))}% - 10px)`,
                           transform: 'translateX(-50%)',
                           boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)'
                         }}
-                        onMouseDown={handleDragStart}
-                        onTouchStart={handleDragStart}
-                        title="Drag to scroll"
-                      >
-                        {/* Grip lines */}
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 opacity-50">
-                          <div className="w-1.5 h-0.5 bg-white rounded-full"></div>
-                          <div className="w-1.5 h-0.5 bg-white rounded-full"></div>
-                          <div className="w-1.5 h-0.5 bg-white rounded-full"></div>
-                        </div>
-                      </div>
+                      />
                     </div>
                   </div>
 
                   {/* ✅ Messages with right padding */}
                   <div
                     ref={scrollContainerRef}
-                    className="h-full overflow-y-auto space-y-2 sm:space-y-3 pr-4 sm:pr-6"
+                    className="h-full overflow-y-auto space-y-2 sm:space-y-3 pr-4 sm:pr-5"
+                    onScroll={() => {
+                      const container = scrollContainerRef.current
+                      if (!container) return
+                      const { scrollTop, scrollHeight, clientHeight } = container
+                      const maxScroll = scrollHeight - clientHeight
+                      const percentage = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0
+                      setScrollPercentage(percentage)
+                      
+                      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
+                      setIsAtBottom(isAtBottom)
+                    }}
                   >
                     {messages.map((msg, index) => {
                       const senderId = normalizeSender(msg.sender)
