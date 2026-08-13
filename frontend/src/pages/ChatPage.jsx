@@ -54,10 +54,11 @@ const ChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
-  // ✅ Scroll button states
-  const [showScrollButton, setShowScrollButton] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
+  // ✅ Scroll indicator states
+  const [scrollPercentage, setScrollPercentage] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const scrollContainerRef = useRef(null)
+  const scrollTrackRef = useRef(null)
   const { theme } = useTheme()
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
   const messagesEndRef = useRef(null)
@@ -72,40 +73,25 @@ const ChatPage = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // ✅ Scroll listener for showing/hiding buttons
+  // ✅ Update scroll percentage when scrolling
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container) return
 
-    const handleScroll = () => {
+    const updateScrollPercentage = () => {
       const { scrollTop, scrollHeight, clientHeight } = container
-      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
-      setShowScrollButton(!isNearBottom)
+      const maxScroll = scrollHeight - clientHeight
+      const percentage = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0
+      setScrollPercentage(percentage)
     }
 
-    container.addEventListener('scroll', handleScroll)
-    return () => container.removeEventListener('scroll', handleScroll)
-  }, [selectedUser])
-
-  // ✅ Track unread messages when scrolled up
-  useEffect(() => {
-    if (!messages.length) return
-
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    const { scrollTop, scrollHeight, clientHeight } = container
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
-
-    if (isNearBottom) {
-      // Auto-scroll to bottom if already near bottom
-      scrollToBottom()
-      setUnreadCount(0)
-    } else {
-      // Increment unread count if new message arrives while scrolled up
-      setUnreadCount(prev => prev + 1)
-    }
-  }, [messages])
+    container.addEventListener('scroll', updateScrollPercentage)
+    
+    // Update on mount and when messages change
+    setTimeout(updateScrollPercentage, 100)
+    
+    return () => container.removeEventListener('scroll', updateScrollPercentage)
+  }, [messages, selectedUser])
 
   // ✅ Handle browser back button
   useEffect(() => {
@@ -396,17 +382,73 @@ const ChatPage = () => {
   }
 
   // ✅ Scroll functions
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-      setUnreadCount(0)
-      setShowScrollButton(false)
-    }, 100)
+  const scrollToPercentage = (percentage) => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    
+    const { scrollHeight, clientHeight } = container
+    const maxScroll = scrollHeight - clientHeight
+    const targetScroll = (percentage / 100) * maxScroll
+    
+    container.scrollTo({ top: targetScroll, behavior: 'smooth' })
   }
 
-  const scrollToTop = () => {
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  // ✅ Handle drag on scroll indicator
+  const handleDragStart = (e) => {
+    e.preventDefault()
+    setIsDragging(true)
   }
+
+  const handleDragMove = (e) => {
+    if (!isDragging || !scrollTrackRef.current) return
+    
+    const rect = scrollTrackRef.current.getBoundingClientRect()
+    const clientY = e.clientY || e.touches?.[0]?.clientY || 0
+    const y = clientY - rect.top
+    const percentage = Math.max(0, Math.min(100, (y / rect.height) * 100))
+    
+    setScrollPercentage(percentage)
+    scrollToPercentage(percentage)
+  }
+
+  const handleDragEnd = () => {
+    setIsDragging(false)
+  }
+
+  // ✅ Click on track to jump to position
+  const handleTrackClick = (e) => {
+    if (!scrollTrackRef.current) return
+    
+    const rect = scrollTrackRef.current.getBoundingClientRect()
+    const clientY = e.clientY || e.touches?.[0]?.clientY || 0
+    const y = clientY - rect.top
+    const percentage = Math.max(0, Math.min(100, (y / rect.height) * 100))
+    
+    setScrollPercentage(percentage)
+    scrollToPercentage(percentage)
+  }
+
+  // ✅ Add drag listeners
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handleDragMove)
+      document.addEventListener('mouseup', handleDragEnd)
+      document.addEventListener('touchmove', handleDragMove)
+      document.addEventListener('touchend', handleDragEnd)
+    } else {
+      document.removeEventListener('mousemove', handleDragMove)
+      document.removeEventListener('mouseup', handleDragEnd)
+      document.removeEventListener('touchmove', handleDragMove)
+      document.removeEventListener('touchend', handleDragEnd)
+    }
+    
+    return () => {
+      document.removeEventListener('mousemove', handleDragMove)
+      document.removeEventListener('mouseup', handleDragEnd)
+      document.removeEventListener('touchmove', handleDragMove)
+      document.removeEventListener('touchend', handleDragEnd)
+    }
+  }, [isDragging])
 
   // ✅ SELECT USER - Persist to localStorage
   const selectUser = (chatUser) => {
@@ -704,7 +746,7 @@ const ChatPage = () => {
           </div>
 
           {/* Chat Window - Full height on mobile with input at bottom */}
-          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
+          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500 relative`}>
             {selectedUser ? (
               <>
                 {/* Chat Header */}
@@ -720,7 +762,36 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* ✅ Messages with scroll container ref */}
+                {/* ✅ Scroll Indicator - Right side of chat */}
+                <div className="absolute right-1 sm:right-2 top-0 bottom-0 w-4 sm:w-5 flex items-center pointer-events-none z-10">
+                  <div
+                    ref={scrollTrackRef}
+                    className="relative w-1 sm:w-1.5 h-[70%] bg-gray-300 dark:bg-gray-600 rounded-full pointer-events-auto cursor-pointer"
+                    onClick={handleTrackClick}
+                  >
+                    {/* Scroll Indicator Thumb */}
+                    <div
+                      className="absolute left-1/2 -translate-x-1/2 w-4 sm:w-5 h-5 sm:h-6 bg-primary-500 dark:bg-primary-400 rounded-full shadow-lg cursor-grab active:cursor-grabbing pointer-events-auto transition-all duration-150"
+                      style={{
+                        top: `calc(${scrollPercentage}% - 10px)`,
+                        transform: 'translateX(-50%)',
+                        boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)'
+                      }}
+                      onMouseDown={handleDragStart}
+                      onTouchStart={handleDragStart}
+                      title="Drag to scroll"
+                    >
+                      {/* Grip lines */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 opacity-50">
+                        <div className="w-1.5 h-0.5 bg-white rounded-full"></div>
+                        <div className="w-1.5 h-0.5 bg-white rounded-full"></div>
+                        <div className="w-1.5 h-0.5 bg-white rounded-full"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Messages */}
                 <div
                   ref={scrollContainerRef}
                   className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0"
@@ -802,50 +873,6 @@ const ChatPage = () => {
                   })}
                   <div ref={messagesEndRef} />
                 </div>
-
-                {/* ✅ Floating Scroll Buttons */}
-                {showScrollButton && (
-                  <>
-                    {/* Bottom button with unread count */}
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      onClick={scrollToBottom}
-                      className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-50 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg hover:bg-primary-600 transition-all flex items-center justify-center"
-                      title="Jump to latest messages"
-                    >
-                      {unreadCount > 0 ? (
-                        <span className="relative">
-                          <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                            {unreadCount > 9 ? '9+' : unreadCount}
-                          </span>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                          </svg>
-                        </span>
-                      ) : (
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                        </svg>
-                      )}
-                    </motion.button>
-
-                    {/* Top button */}
-                    <motion.button
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      onClick={scrollToTop}
-                      className="fixed top-20 right-4 sm:top-24 sm:right-6 z-50 w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all flex items-center justify-center"
-                      title="Scroll to top"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-                      </svg>
-                    </motion.button>
-                  </>
-                )}
 
                 {/* Reply Preview */}
                 {replyToMessage && (
