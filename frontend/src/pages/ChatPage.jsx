@@ -62,60 +62,50 @@ const ChatPage = () => {
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
-  // ✅ Refs for scroll tracking (avoid stale state inside callbacks/effects)
-  const isNearBottomRef = useRef(true)
-  const prevSelectedUserIdRef = useRef(null)
-  const prevMessagesLengthRef = useRef(0)
   const { enableNotifications } = useNotifications()
   const [showProfile, setShowProfile] = useState(false)
 
   const token = localStorage.getItem('token')
 
-  // ✅ Called directly via onScroll on the messages container — no ref-timing issues
-  const handleScroll = () => {
-    const container = scrollContainerRef.current
-    if (!container) return
-    const { scrollTop, scrollHeight, clientHeight } = container
-    const nearBottom = scrollHeight - scrollTop - clientHeight < 100
-    isNearBottomRef.current = nearBottom
-    setShowScrollButton(!nearBottom)
-    if (nearBottom) setUnreadCount(0)
-  }
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
 
-  // ✅ Decide how to handle scroll position whenever `messages` changes:
-  //    - switched conversation  -> jump instantly to the bottom
-  //    - a genuinely new message arrived -> smooth-scroll only if already near bottom,
-  //      otherwise bump the unread counter
-  //    - reactions/edits/deletes (same length) -> leave scroll position untouched
+  // ✅ Scroll listener for showing/hiding buttons
   useEffect(() => {
     const container = scrollContainerRef.current
-    if (!container || !messages.length) return
+    if (!container) return
 
-    const conversationChanged = prevSelectedUserIdRef.current !== selectedUser?._id
-    const lengthIncreased = messages.length > prevMessagesLengthRef.current
-
-    prevSelectedUserIdRef.current = selectedUser?._id
-    prevMessagesLengthRef.current = messages.length
-
-    if (conversationChanged) {
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight
-      })
-      isNearBottomRef.current = true
-      setShowScrollButton(false)
-      setUnreadCount(0)
-      return
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setShowScrollButton(!isNearBottom)
     }
 
-    if (!lengthIncreased) return
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [selectedUser])
 
-    if (isNearBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  // ✅ Track unread messages when scrolled up
+  useEffect(() => {
+    if (!messages.length) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+
+    if (isNearBottom) {
+      // Auto-scroll to bottom if already near bottom
+      scrollToBottom()
       setUnreadCount(0)
     } else {
+      // Increment unread count if new message arrives while scrolled up
       setUnreadCount(prev => prev + 1)
     }
-  }, [messages, selectedUser])
+  }, [messages])
 
   // ✅ Handle browser back button
   useEffect(() => {
@@ -407,13 +397,11 @@ const ChatPage = () => {
 
   // ✅ Scroll functions
   const scrollToBottom = () => {
-    const container = scrollContainerRef.current
-    if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-    }
-    isNearBottomRef.current = true
-    setUnreadCount(0)
-    setShowScrollButton(false)
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setUnreadCount(0)
+      setShowScrollButton(false)
+    }, 100)
   }
 
   const scrollToTop = () => {
@@ -481,9 +469,6 @@ const ChatPage = () => {
     setNewMessage('')
     setUploadedImage(null)
     setReplyToMessage(null)
-
-    // ✅ Always land on your own message after sending, even if you'd scrolled up
-    scrollToBottom()
 
     if (window.innerWidth < 1024) {
       setSidebarOpen(false)
@@ -735,10 +720,9 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* ✅ Messages with scroll container ref + onScroll handler */}
+                {/* ✅ Messages with scroll container ref */}
                 <div
                   ref={scrollContainerRef}
-                  onScroll={handleScroll}
                   className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0"
                 >
                   {messages.map((msg, index) => {
