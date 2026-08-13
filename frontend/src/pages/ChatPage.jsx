@@ -183,13 +183,13 @@ const ChatPage = () => {
     return () => window.removeEventListener('popstate', handlePopState)
   }, [selectedUser])
 
-  // ✅ Update scroll percentage when scrolling (no smooth scroll during drag)
+  // ✅ Update scroll percentage when scrolling
   useEffect(() => {
     const container = scrollContainerRef.current
     if (!container) return
 
     const updateScrollPercentage = () => {
-      if (isDragging) return // Don't update while dragging
+      if (isDragging) return
       
       const { scrollTop, scrollHeight, clientHeight } = container
       const maxScroll = scrollHeight - clientHeight
@@ -385,7 +385,7 @@ const ChatPage = () => {
   }
 
   // ✅ Scroll functions
-  const scrollToPercentage = (percentage, smooth = true) => {
+  const scrollToPercentage = (percentage) => {
     const container = scrollContainerRef.current
     if (!container) return
     
@@ -395,27 +395,32 @@ const ChatPage = () => {
     
     container.scrollTo({ 
       top: targetScroll, 
-      behavior: smooth ? 'smooth' : 'auto' 
+      behavior: isDragging ? 'auto' : 'smooth'
     })
   }
 
-  // ✅ Handle drag on scroll indicator (INSTANT, no smooth scroll)
+  // ✅ Handle drag on scroll indicator
   const handleDragStart = (e) => {
     e.preventDefault()
     setIsDragging(true)
   }
 
   const handleDragMove = (e) => {
-    if (!isDragging || !scrollTrackRef.current) return
+    if (!isDragging || !scrollTrackRef.current || !scrollContainerRef.current) return
     
     const rect = scrollTrackRef.current.getBoundingClientRect()
     const clientY = e.clientY || e.touches?.[0]?.clientY || 0
-    const y = clientY - rect.top
-    const percentage = Math.max(0, Math.min(100, (y / rect.height) * 100))
+    const y = Math.max(0, Math.min(rect.height, clientY - rect.top))
+    const percentage = (y / rect.height) * 100
     
     setScrollPercentage(percentage)
-    // ✅ INSTANT scroll, no smooth animation during drag
-    scrollToPercentage(percentage, false)
+    
+    // ✅ Directly scroll the container
+    const container = scrollContainerRef.current
+    const { scrollHeight, clientHeight } = container
+    const maxScroll = scrollHeight - clientHeight
+    const targetScroll = (percentage / 100) * maxScroll
+    container.scrollTop = targetScroll
   }
 
   const handleDragEnd = () => {
@@ -424,15 +429,15 @@ const ChatPage = () => {
 
   // ✅ Click on track to jump to position
   const handleTrackClick = (e) => {
-    if (!scrollTrackRef.current) return
+    if (!scrollTrackRef.current || !scrollContainerRef.current) return
     
     const rect = scrollTrackRef.current.getBoundingClientRect()
     const clientY = e.clientY || e.touches?.[0]?.clientY || 0
-    const y = clientY - rect.top
-    const percentage = Math.max(0, Math.min(100, (y / rect.height) * 100))
+    const y = Math.max(0, Math.min(rect.height, clientY - rect.top))
+    const percentage = (y / rect.height) * 100
     
     setScrollPercentage(percentage)
-    scrollToPercentage(percentage, true)
+    scrollToPercentage(percentage)
   }
 
   // ✅ Add drag listeners
@@ -752,7 +757,7 @@ const ChatPage = () => {
             )}
           </div>
 
-          {/* Chat Window - with scroll indicator INSIDE the chat */}
+          {/* ✅ Chat Window */}
           <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500 relative`}>
             {selectedUser ? (
               <>
@@ -769,18 +774,18 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* ✅ Messages Container - THIS is where the scroll indicator should be anchored */}
+                {/* ✅ Messages Container with Scroll Indicator */}
                 <div className="relative flex-1 min-h-0">
-                  {/* ✅ Scroll Indicator - Anchored to THIS container, not the whole card */}
+                  {/* ✅ Scroll Indicator */}
                   <div className="absolute right-0 top-0 bottom-0 w-4 sm:w-5 flex items-center pointer-events-none z-10">
                     <div
                       ref={scrollTrackRef}
-                      className="relative w-1 sm:w-1.5 h-full bg-gray-300 dark:bg-gray-600 rounded-full pointer-events-auto cursor-pointer"
+                      className="relative w-1 sm:w-1.5 h-[80%] bg-gray-300 dark:bg-gray-600 rounded-full pointer-events-auto cursor-pointer"
                       onClick={handleTrackClick}
                     >
                       {/* Scroll Indicator Thumb */}
                       <div
-                        className="absolute left-1/2 -translate-x-1/2 w-4 sm:w-5 h-5 sm:h-6 bg-primary-500 dark:bg-primary-400 rounded-full shadow-lg cursor-grab active:cursor-grabbing pointer-events-auto transition-colors duration-150"
+                        className="absolute left-1/2 -translate-x-1/2 w-4 sm:w-5 h-5 sm:h-6 bg-primary-500 dark:bg-primary-400 rounded-full shadow-lg cursor-grab active:cursor-grabbing pointer-events-auto transition-none"
                         style={{
                           top: `calc(${Math.max(0, Math.min(100, scrollPercentage))}% - 10px)`,
                           transform: 'translateX(-50%)',
@@ -800,10 +805,10 @@ const ChatPage = () => {
                     </div>
                   </div>
 
-                  {/* ✅ Messages with right padding to prevent overlap */}
+                  {/* ✅ Messages with right padding */}
                   <div
                     ref={scrollContainerRef}
-                    className="h-full overflow-y-auto space-y-2 sm:space-y-3 pr-4 sm:pr-5"
+                    className="h-full overflow-y-auto space-y-2 sm:space-y-3 pr-4 sm:pr-6"
                   >
                     {messages.map((msg, index) => {
                       const senderId = normalizeSender(msg.sender)
@@ -814,7 +819,7 @@ const ChatPage = () => {
 
                       return (
                         <div key={index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
+                          <div className={`max-w-[85%] sm:max-w-[75%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
                             isMyMessage
                               ? `bg-gradient-to-r ${theme.button} text-white`
                               : isDark
