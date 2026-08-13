@@ -54,9 +54,9 @@ const ChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
-  // ✅ Scroll indicator states - SIMPLE VERSION
-  const [scrollPercentage, setScrollPercentage] = useState(0)
-  const [isAtBottom, setIsAtBottom] = useState(true)
+  // ✅ Scroll button states
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const scrollContainerRef = useRef(null)
   const { theme } = useTheme()
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
@@ -67,6 +67,57 @@ const ChatPage = () => {
 
   const token = localStorage.getItem('token')
 
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // ✅ Scroll listener for showing/hiding buttons
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setShowScrollButton(!isNearBottom)
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [selectedUser])
+
+  // ✅ Track unread messages when scrolled up
+  useEffect(() => {
+    if (!messages.length) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+
+    if (isNearBottom) {
+      // Auto-scroll to bottom if already near bottom
+      scrollToBottom()
+      setUnreadCount(0)
+    } else {
+      // Increment unread count if new message arrives while scrolled up
+      setUnreadCount(prev => prev + 1)
+    }
+  }, [messages])
+
+  // ✅ Handle browser back button
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selectedUser) {
+        setSelectedUser(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [selectedUser])
+
   // ✅ Check auth with token expiry
   useEffect(() => {
     if (!token) {
@@ -74,6 +125,7 @@ const ChatPage = () => {
       return
     }
 
+    // ✅ Check if token is expired
     try {
       const payload = JSON.parse(atob(token.split('.')[1]))
       const expiryTime = payload.exp * 1000
@@ -88,8 +140,9 @@ const ChatPage = () => {
         return
       }
 
+      // ✅ Auto-refresh token 5 minutes before expiry
       const timeUntilExpiry = expiryTime - Date.now()
-      const refreshThreshold = 5 * 60 * 1000
+      const refreshThreshold = 5 * 60 * 1000 // 5 minutes
 
       if (timeUntilExpiry > 0 && timeUntilExpiry < refreshThreshold) {
         console.log('🔄 Token expiring soon...')
@@ -116,6 +169,7 @@ const ChatPage = () => {
         const response = await apiClient.get('/api/users')
         setUsers(response.data)
 
+        // ✅ Restore previously selected conversation after refresh
         const savedUserId = localStorage.getItem('selectedUserId')
         if (savedUserId) {
           const restoredUser = response.data.find(u => u._id === savedUserId)
@@ -170,18 +224,7 @@ const ChatPage = () => {
     fetchMessages()
   }, [selectedUser, token])
 
-  // ✅ Handle browser back button
-  useEffect(() => {
-    const handlePopState = () => {
-      if (selectedUser) {
-        setSelectedUser(null)
-      }
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [selectedUser])
-
-  // ✅ Listen for incoming messages
+  // Listen for incoming messages
   useEffect(() => {
     if (!socket) return
 
@@ -254,6 +297,7 @@ const ChatPage = () => {
       ))
     }
 
+    // Handle messages delivered (sent → delivered)
     const handleMessagesDelivered = ({ messageIds }) => {
       setMessages(prev => prev.map(msg =>
         messageIds.includes(msg._id) && msg.status !== 'read'
@@ -262,6 +306,7 @@ const ChatPage = () => {
       ))
     }
 
+    // Handle messages read (delivered → read)
     const handleMessagesRead = ({ messageIds }) => {
       setMessages(prev => prev.map(msg =>
         messageIds.includes(msg._id)
@@ -319,6 +364,7 @@ const ChatPage = () => {
       return
     }
 
+    // Optimistic update
     setMessages(prev => prev.map(msg =>
       msg._id === messageId
         ? { ...msg, deleted: true, text: '', image: '' }
@@ -347,6 +393,19 @@ const ChatPage = () => {
 
   const cancelReply = () => {
     setReplyToMessage(null)
+  }
+
+  // ✅ Scroll functions
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setUnreadCount(0)
+      setShowScrollButton(false)
+    }, 100)
+  }
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   // ✅ SELECT USER - Persist to localStorage
@@ -492,7 +551,7 @@ const ChatPage = () => {
         </div>
       </nav>
 
-      {/* Main Content */}
+      {/* Main Content - Full height on mobile */}
       <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-2 sm:py-4 lg:py-6 h-[calc(100dvh-56px)] sm:h-auto">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 h-full lg:h-auto">
           {/* Sidebar - Mobile Overlay */}
@@ -644,12 +703,12 @@ const ChatPage = () => {
             )}
           </div>
 
-          {/* ✅ Chat Window */}
-          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500 relative`}>
+          {/* Chat Window - Full height on mobile with input at bottom */}
+          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
             {selectedUser ? (
               <>
                 {/* Chat Header */}
-                <div className={`flex items-center gap-2 sm:gap-3 pb-2 sm:pb-3 border-b ${isDark ? 'border-white/20' : theme.border} mb-2 sm:mb-4 flex-shrink-0`}>
+                <div className={`flex items-center gap-2 sm:gap-3 pb-2 sm:pb-3 border-b ${isDark ? 'border-white/20' : theme.border} mb-2 sm:mb-4`}>
                   <Avatar user={selectedUser} size="md" theme={theme} isDark={isDark} />
                   <div className="flex-1 min-w-0">
                     <h3 className={`font-heading font-semibold ${theme.text} text-sm sm:text-base truncate`}>
@@ -661,121 +720,136 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* ✅ Messages Container with Simple Scroll Indicator */}
-                <div className="relative flex-1 min-h-0">
-                  {/* ✅ Simple Scroll Indicator - Visual only, no interaction */}
-                  <div className="absolute right-0 top-0 bottom-0 w-3 sm:w-4 flex items-center pointer-events-none z-10">
-                    <div className="relative w-1 h-[80%] bg-gray-300 dark:bg-gray-600 rounded-full">
-                      {/* Scroll Indicator Thumb */}
-                      <div
-                        className="absolute left-1/2 -translate-x-1/2 w-3 sm:w-4 h-5 sm:h-6 bg-primary-500 dark:bg-primary-400 rounded-full transition-all duration-75"
-                        style={{
-                          top: `calc(${Math.max(0, Math.min(100, scrollPercentage))}% - 10px)`,
-                          transform: 'translateX(-50%)',
-                          boxShadow: '0 2px 8px rgba(139, 92, 246, 0.4)'
-                        }}
-                      />
-                    </div>
-                  </div>
+                {/* ✅ Messages with scroll container ref */}
+                <div
+                  ref={scrollContainerRef}
+                  className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0"
+                >
+                  {messages.map((msg, index) => {
+                    const senderId = normalizeSender(msg.sender)
+                    const isMyMessage = String(senderId) === String(user?._id)
+                    const isDeleted = msg.deleted === true
+                    const hasReply = msg.replyTo || msg.replyToText
+                    const replySenderName = msg.replyToSender?.name || 'Someone'
 
-                  {/* ✅ Messages with right padding */}
-                  <div
-                    ref={scrollContainerRef}
-                    className="h-full overflow-y-auto space-y-2 sm:space-y-3 pr-4 sm:pr-5"
-                    onScroll={() => {
-                      const container = scrollContainerRef.current
-                      if (!container) return
-                      const { scrollTop, scrollHeight, clientHeight } = container
-                      const maxScroll = scrollHeight - clientHeight
-                      const percentage = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0
-                      setScrollPercentage(percentage)
-                      
-                      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50
-                      setIsAtBottom(isAtBottom)
-                    }}
-                  >
-                    {messages.map((msg, index) => {
-                      const senderId = normalizeSender(msg.sender)
-                      const isMyMessage = String(senderId) === String(user?._id)
-                      const isDeleted = msg.deleted === true
-                      const hasReply = msg.replyTo || msg.replyToText
-                      const replySenderName = msg.replyToSender?.name || 'Someone'
-
-                      return (
-                        <div key={index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-[85%] sm:max-w-[75%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
-                            isMyMessage
-                              ? `bg-gradient-to-r ${theme.button} text-white`
-                              : isDark
-                                ? 'bg-white/10 border border-white/20 text-white'
-                                : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {isDeleted ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm italic opacity-60">
-                                  {isMyMessage 
-                                    ? 'You deleted this message' 
-                                    : `${selectedUser?.name || 'Someone'} deleted a message`}
-                                </span>
-                              </div>
-                            ) : (
-                              <>
-                                {hasReply && (
-                                  <div className={`mb-1.5 pl-2 border-l-2 ${isMyMessage ? 'border-white/50' : 'border-gray-400 dark:border-gray-500'} text-xs opacity-70`}>
-                                    <span className="font-medium">
-                                      {replySenderName}:
-                                    </span>
-                                    <span className="ml-1 italic truncate block max-w-[200px]">
-                                      {msg.replyToText || 'Reply to message'}
-                                    </span>
-                                  </div>
-                                )}
-
-                                {msg.image && (
-                                  <img
-                                    src={msg.image}
-                                    alt="Shared"
-                                    className="max-w-full rounded-lg mb-1 sm:mb-2 cursor-pointer hover:opacity-90 transition"
-                                    onClick={() => setSelectedImage(msg.image)}
-                                  />
-                                )}
-                                {msg.text && <p className="text-sm sm:text-base break-words">{msg.text}</p>}
-                                
-                                <span className="text-[9px] sm:text-[10px] opacity-70 mt-0.5 sm:mt-1 flex items-center gap-1">
-                                  {new Date(msg.createdAt).toLocaleTimeString()}
-                                  {isMyMessage && <MessageStatus status={msg.status || 'sent'} />}
-                                </span>
-
-                                {/* Reactions */}
-                                <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
-                                  <MessageReactions
-                                    messageId={msg._id}
-                                    reactions={msg.reactions}
-                                    currentUserId={user._id}
-                                    onReact={handleReaction}
-                                    isMyMessage={isMyMessage}
-                                  />
-                                  <MessageMenu
-                                    messageId={msg._id}
-                                    isMyMessage={isMyMessage}
-                                    onDelete={handleDeleteMessage}
-                                    onCopy={() => handleCopyMessage(msg.text)}
-                                    onReply={() => handleReply(msg)}
-                                  />
+                    return (
+                      <div key={index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
+                          isMyMessage
+                            ? `bg-gradient-to-r ${theme.button} text-white`
+                            : isDark
+                              ? 'bg-white/10 border border-white/20 text-white'
+                              : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {isDeleted ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm italic opacity-60">
+                                {isMyMessage 
+                                  ? 'You deleted this message' 
+                                  : `${selectedUser?.name || 'Someone'} deleted a message`}
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              {hasReply && (
+                                <div className={`mb-1.5 pl-2 border-l-2 ${isMyMessage ? 'border-white/50' : 'border-gray-400 dark:border-gray-500'} text-xs opacity-70`}>
+                                  <span className="font-medium">
+                                    {replySenderName}:
+                                  </span>
+                                  <span className="ml-1 italic truncate block max-w-[200px]">
+                                    {msg.replyToText || 'Reply to message'}
+                                  </span>
                                 </div>
-                              </>
-                            )}
-                          </div>
+                              )}
+
+                              {msg.image && (
+                                <img
+                                  src={msg.image}
+                                  alt="Shared"
+                                  className="max-w-full rounded-lg mb-1 sm:mb-2 cursor-pointer hover:opacity-90 transition"
+                                  onClick={() => setSelectedImage(msg.image)}
+                                />
+                              )}
+                              {msg.text && <p className="text-sm sm:text-base break-words">{msg.text}</p>}
+                              
+                              <span className="text-[9px] sm:text-[10px] opacity-70 mt-0.5 sm:mt-1 flex items-center gap-1">
+                                {new Date(msg.createdAt).toLocaleTimeString()}
+                                {isMyMessage && <MessageStatus status={msg.status || 'sent'} />}
+                              </span>
+
+                              {/* Reactions */}
+                              <div className="flex items-center gap-0.5 mt-0.5 flex-wrap">
+                                <MessageReactions
+                                  messageId={msg._id}
+                                  reactions={msg.reactions}
+                                  currentUserId={user._id}
+                                  onReact={handleReaction}
+                                  isMyMessage={isMyMessage}
+                                />
+                                <MessageMenu
+                                  messageId={msg._id}
+                                  isMyMessage={isMyMessage}
+                                  onDelete={handleDeleteMessage}
+                                  onCopy={() => handleCopyMessage(msg.text)}
+                                  onReply={() => handleReply(msg)}
+                                />
+                              </div>
+                            </>
+                          )}
                         </div>
-                      )
-                    })}
-                    <div ref={messagesEndRef} />
-                  </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
+
+                {/* ✅ Floating Scroll Buttons */}
+                {showScrollButton && (
+                  <>
+                    {/* Bottom button with unread count */}
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={scrollToBottom}
+                      className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-50 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg hover:bg-primary-600 transition-all flex items-center justify-center"
+                      title="Jump to latest messages"
+                    >
+                      {unreadCount > 0 ? (
+                        <span className="relative">
+                          <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                      )}
+                    </motion.button>
+
+                    {/* Top button */}
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={scrollToTop}
+                      className="fixed top-20 right-4 sm:top-24 sm:right-6 z-50 w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all flex items-center justify-center"
+                      title="Scroll to top"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      </svg>
+                    </motion.button>
+                  </>
+                )}
 
                 {/* Reply Preview */}
                 {replyToMessage && (
-                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center gap-2 border-l-4 border-blue-500 flex-shrink-0">
+                  <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center gap-2 border-l-4 border-blue-500">
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
                         Replying to {replyToMessage.sender?.name || 'User'}:
@@ -794,7 +868,7 @@ const ChatPage = () => {
                 )}
 
                 {/* Message Input */}
-                <div className="mt-2 sm:mt-4 flex-shrink-0">
+                <div className="mt-2 sm:mt-4">
                   {isUserTyping && (
                     <div className="text-[10px] sm:text-xs text-primary-500 dark:text-primary-400 mb-1 sm:mb-2 flex items-center gap-1">
                       <span className="animate-pulse">●</span>
