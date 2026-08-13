@@ -10,7 +10,7 @@ import MessageMenu from '../components/MessageMenu'
 import MessageStatus from '../components/MessageStatus'
 import { useTheme } from '../context/ThemeContext'
 import { useSocket } from '../context/SocketContext'
-import apiClient from '../api/client'  // ✅ NEW
+import apiClient from '../api/client'
 import toast from 'react-hot-toast'
 import { useNotifications } from '../hooks/useNotifications'
 import NotificationBanner from '../components/NotificationBanner'
@@ -54,6 +54,10 @@ const ChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
+  // ✅ Scroll button states
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const scrollContainerRef = useRef(null)
   const { theme } = useTheme()
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
   const messagesEndRef = useRef(null)
@@ -63,10 +67,56 @@ const ChatPage = () => {
 
   const token = localStorage.getItem('token')
 
-  // Auto-scroll
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // ✅ Scroll listener for showing/hiding buttons
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setShowScrollButton(!isNearBottom)
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [selectedUser])
+
+  // ✅ Track unread messages when scrolled up
+  useEffect(() => {
+    if (!messages.length) return
+
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+
+    if (isNearBottom) {
+      // Auto-scroll to bottom if already near bottom
+      scrollToBottom()
+      setUnreadCount(0)
+    } else {
+      // Increment unread count if new message arrives while scrolled up
+      setUnreadCount(prev => prev + 1)
+    }
+  }, [messages])
+
+  // ✅ Handle browser back button
+  useEffect(() => {
+    const handlePopState = () => {
+      if (selectedUser) {
+        setSelectedUser(null)
+      }
+    }
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [selectedUser])
 
   // ✅ Check auth with token expiry
   useEffect(() => {
@@ -109,17 +159,6 @@ const ChatPage = () => {
     const userData = JSON.parse(localStorage.getItem('user') || '{}')
     setUser(normalizeUser(userData))
   }, [navigate, token])
-
-  // ✅ Handle browser back button
-  useEffect(() => {
-    const handlePopState = () => {
-      if (selectedUser) {
-        setSelectedUser(null)
-      }
-    }
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
-  }, [selectedUser])
 
   // ✅ Fetch all users & restore selected conversation
   useEffect(() => {
@@ -354,6 +393,19 @@ const ChatPage = () => {
 
   const cancelReply = () => {
     setReplyToMessage(null)
+  }
+
+  // ✅ Scroll functions
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setUnreadCount(0)
+      setShowScrollButton(false)
+    }, 100)
+  }
+
+  const scrollToTop = () => {
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   // ✅ SELECT USER - Persist to localStorage
@@ -668,8 +720,11 @@ const ChatPage = () => {
                   </div>
                 </div>
 
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0">
+                {/* ✅ Messages with scroll container ref */}
+                <div
+                  ref={scrollContainerRef}
+                  className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0"
+                >
                   {messages.map((msg, index) => {
                     const senderId = normalizeSender(msg.sender)
                     const isMyMessage = String(senderId) === String(user?._id)
@@ -747,6 +802,50 @@ const ChatPage = () => {
                   })}
                   <div ref={messagesEndRef} />
                 </div>
+
+                {/* ✅ Floating Scroll Buttons */}
+                {showScrollButton && (
+                  <>
+                    {/* Bottom button with unread count */}
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={scrollToBottom}
+                      className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-50 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg hover:bg-primary-600 transition-all flex items-center justify-center"
+                      title="Jump to latest messages"
+                    >
+                      {unreadCount > 0 ? (
+                        <span className="relative">
+                          <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                      )}
+                    </motion.button>
+
+                    {/* Top button */}
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={scrollToTop}
+                      className="fixed top-20 right-4 sm:top-24 sm:right-6 z-50 w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all flex items-center justify-center"
+                      title="Scroll to top"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                      </svg>
+                    </motion.button>
+                  </>
+                )}
 
                 {/* Reply Preview */}
                 {replyToMessage && (
