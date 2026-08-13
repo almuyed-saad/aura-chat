@@ -54,14 +54,10 @@ const ChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
-  // Scroll navigation state
-  const [showTopButton, setShowTopButton] = useState(false)
-  const [showBottomButton, setShowBottomButton] = useState(false)
+  // ✅ Scroll button states
+  const [showScrollButton, setShowScrollButton] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const scrollContainerRef = useRef(null)
-  const isNearBottomRef = useRef(true)
-  const previousMessageCountRef = useRef(0)
-  const initialScrollPendingRef = useRef(true)
   const { theme } = useTheme()
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
   const messagesEndRef = useRef(null)
@@ -71,61 +67,45 @@ const ChatPage = () => {
 
   const token = localStorage.getItem('token')
 
-  const updateScrollButtons = () => {
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // ✅ Scroll listener for showing/hiding buttons
+  useEffect(() => {
     const container = scrollContainerRef.current
-    if (!container) {
-      setShowTopButton(false)
-      setShowBottomButton(false)
-      return
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100
+      setShowScrollButton(!isNearBottom)
     }
 
-    const { scrollTop, scrollHeight, clientHeight } = container
-    const hasOverflow = scrollHeight > clientHeight + 4
-    const atTop = scrollTop <= 24
-    const atBottom = scrollHeight - scrollTop - clientHeight <= 24
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [selectedUser])
 
-    isNearBottomRef.current = atBottom
-    setShowTopButton(hasOverflow && !atTop)
-    setShowBottomButton(hasOverflow && !atBottom)
-  }
-
-  const handleMessagesScroll = () => {
-    updateScrollButtons()
-  }
-
-  // Scroll to the latest position when a conversation is first opened, but do not
-  // interrupt the user after they intentionally scroll up.
+  // ✅ Track unread messages when scrolled up
   useEffect(() => {
-    if (!selectedUser) return
+    if (!messages.length) return
 
-    const frame = requestAnimationFrame(() => {
-      const container = scrollContainerRef.current
-      if (!container) return
+    const container = scrollContainerRef.current
+    if (!container) return
 
-      const messageCount = messages.length
-      const previousCount = previousMessageCountRef.current
+    const { scrollTop, scrollHeight, clientHeight } = container
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
 
-      if (initialScrollPendingRef.current) {
-        container.scrollTop = container.scrollHeight
-        initialScrollPendingRef.current = false
-        isNearBottomRef.current = true
-        setUnreadCount(0)
-      } else if (messageCount > previousCount) {
-        const addedCount = messageCount - previousCount
-        if (isNearBottomRef.current) {
-          container.scrollTop = container.scrollHeight
-          setUnreadCount(0)
-        } else {
-          setUnreadCount(prev => prev + addedCount)
-        }
-      }
-
-      previousMessageCountRef.current = messageCount
-      updateScrollButtons()
-    })
-
-    return () => cancelAnimationFrame(frame)
-  }, [selectedUser, messages.length])
+    if (isNearBottom) {
+      // Auto-scroll to bottom if already near bottom
+      scrollToBottom()
+      setUnreadCount(0)
+    } else {
+      // Increment unread count if new message arrives while scrolled up
+      setUnreadCount(prev => prev + 1)
+    }
+  }, [messages])
 
   // ✅ Handle browser back button
   useEffect(() => {
@@ -220,13 +200,6 @@ const ChatPage = () => {
 
     const fetchMessages = async () => {
       try {
-        // Reset scroll bookkeeping before loading the newly selected conversation.
-        initialScrollPendingRef.current = true
-        previousMessageCountRef.current = 0
-        isNearBottomRef.current = true
-        setUnreadCount(0)
-        setMessages([])
-
         const response = await apiClient.get(`/api/messages/${selectedUser._id}`)
         const normalized = response.data.map(msg => ({
           ...msg,
@@ -422,22 +395,17 @@ const ChatPage = () => {
     setReplyToMessage(null)
   }
 
-  // Scroll functions
+  // ✅ Scroll functions
   const scrollToBottom = () => {
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' })
-    isNearBottomRef.current = true
-    setUnreadCount(0)
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setUnreadCount(0)
+      setShowScrollButton(false)
+    }, 100)
   }
 
   const scrollToTop = () => {
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    container.scrollTo({ top: 0, behavior: 'smooth' })
-    isNearBottomRef.current = false
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   // ✅ SELECT USER - Persist to localStorage
@@ -736,7 +704,7 @@ const ChatPage = () => {
           </div>
 
           {/* Chat Window - Full height on mobile with input at bottom */}
-          <div className={`relative lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] overflow-hidden transition-colors duration-500`}>
+          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
             {selectedUser ? (
               <>
                 {/* Chat Header */}
@@ -755,8 +723,7 @@ const ChatPage = () => {
                 {/* ✅ Messages with scroll container ref */}
                 <div
                   ref={scrollContainerRef}
-                  onScroll={handleMessagesScroll}
-                  className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0 overscroll-contain"
+                  className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0"
                 >
                   {messages.map((msg, index) => {
                     const senderId = normalizeSender(msg.sender)
@@ -836,49 +803,49 @@ const ChatPage = () => {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Floating scroll buttons. They stay inside the chat window on every screen size. */}
-                <AnimatePresence>
-                  {showTopButton && (
+                {/* ✅ Floating Scroll Buttons */}
+                {showScrollButton && (
+                  <>
+                    {/* Bottom button with unread count */}
                     <motion.button
-                      key="scroll-to-top"
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
-                      type="button"
-                      onClick={scrollToTop}
-                      aria-label="Scroll to oldest messages"
-                      title="Scroll to top"
-                      className="absolute top-20 right-4 sm:top-24 sm:right-6 z-30 w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all flex items-center justify-center"
+                      onClick={scrollToBottom}
+                      className="fixed bottom-24 right-4 sm:bottom-6 sm:right-6 z-50 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg hover:bg-primary-600 transition-all flex items-center justify-center"
+                      title="Jump to latest messages"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      {unreadCount > 0 ? (
+                        <span className="relative">
+                          <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                            {unreadCount > 9 ? '9+' : unreadCount}
+                          </span>
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                          </svg>
+                        </span>
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                        </svg>
+                      )}
+                    </motion.button>
+
+                    {/* Top button */}
+                    <motion.button
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.8 }}
+                      onClick={scrollToTop}
+                      className="fixed top-20 right-4 sm:top-24 sm:right-6 z-50 w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-all flex items-center justify-center"
+                      title="Scroll to top"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" />
                       </svg>
                     </motion.button>
-                  )}
-
-                  {showBottomButton && (
-                    <motion.button
-                      key="scroll-to-bottom"
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      type="button"
-                      onClick={scrollToBottom}
-                      aria-label="Scroll to latest messages"
-                      title="Jump to latest messages"
-                      className="absolute bottom-24 right-4 sm:bottom-28 sm:right-6 z-30 w-12 h-12 rounded-full bg-primary-500 text-white shadow-lg hover:bg-primary-600 transition-all flex items-center justify-center"
-                    >
-                      {unreadCount > 0 && (
-                        <span className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                          {unreadCount > 9 ? '9+' : unreadCount}
-                        </span>
-                      )}
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                      </svg>
-                    </motion.button>
-                  )}
-                </AnimatePresence>
+                  </>
+                )}
 
                 {/* Reply Preview */}
                 {replyToMessage && (
