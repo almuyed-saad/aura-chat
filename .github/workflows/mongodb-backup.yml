@@ -1,0 +1,52 @@
+name: MongoDB backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 2 * * *'
+
+permissions:
+  contents: read
+
+env:
+  MONGODB_TOOLS_VERSION: '100.12.0'
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Install MongoDB Database Tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-${MONGODB_TOOLS_VERSION}.tgz"
+          curl --fail --silent --show-error --location "$url" --output /tmp/mongodb-tools.tgz
+          mkdir -p /tmp/mongodb-tools
+          tar -xzf /tmp/mongodb-tools.tgz --strip-components=1 -C /tmp/mongodb-tools
+          echo "/tmp/mongodb-tools/bin" >> "$GITHUB_PATH"
+          mongodump --version
+
+      - name: Create compressed backup and checksum
+        env:
+          MONGO_URI: ${{ secrets.MONGO_BACKUP_URI }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${MONGO_URI:-}" || { echo 'MONGO_BACKUP_URI is not configured' >&2; exit 1; }
+          mkdir -p backup
+          stamp=$(date -u +%Y%m%dT%H%M%SZ)
+          archive="backup/aura-${stamp}.archive.gz"
+          umask 077
+          mongodump --uri="$MONGO_URI" --archive="$archive" --gzip
+          sha256sum "$archive" > "$archive.sha256"
+          test -s "$archive" && test -s "$archive.sha256"
+          echo "BACKUP_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Upload compressed backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aura-mongodb-backup
+          path: backup/
+          retention-days: 14
+          if-no-files-found: error
