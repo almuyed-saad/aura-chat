@@ -126,3 +126,41 @@
     outline-offset: 2px;
   }
 }
+
+@layer base {
+  html {
+    @apply antialiased;
+    background: #f8fafc;
+  }
+
+  html.dark {
+    background: #080d19;
+  }
+
+  ::selection {
+    background: rgba(139, 92, 246, 0.28);
+    color: inherit;
+  }
+
+  button:not(:disabled),
+  [role='button'] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  input:disabled,
+  textarea:disabled,
+  select:disabled {
+    cursor: not-allowed;
+  }
+}
+
+@layer components {
+  .theme-panel {
+    @apply rounded-2xl border shadow-xl transition-colors duration-300;
+  }
+
+  .theme-control {
+    @apply rounded-xl border px-3 py-2 outline-none transition-all focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500;
+  }
+}

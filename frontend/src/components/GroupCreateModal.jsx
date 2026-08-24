@@ -12,8 +12,8 @@ const GroupCreateModal = ({ users, onClose, onCreated }) => {
   const [saving, setSaving] = useState(false)
 
   const fieldClass = `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-primary-500/40 ${isDark
-    ? 'border-white/20 bg-[#1a1a1a] text-white placeholder:text-gray-400 focus:border-primary-400'
-    : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-500 focus:border-primary-500'}`
+    ? 'border-slate-600 bg-[#172033] text-slate-50 placeholder:text-slate-300 focus:border-violet-300'
+    : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-600 focus:border-primary-500'}`
 
   const toggleMember = (userId) => {
     setMemberIds(previous => previous.includes(userId)
@@ -54,7 +54,7 @@ const GroupCreateModal = ({ users, onClose, onCreated }) => {
         </label>
         <div>
           <p className={`text-sm font-medium ${theme.text} mb-2`}>Add members</p>
-          <div className={`max-h-40 overflow-y-auto space-y-1 rounded-xl border p-1 ${isDark ? 'border-white/15 bg-black/20' : 'border-slate-200 bg-slate-50'}`}>
+          <div className={`max-h-40 overflow-y-auto space-y-1 rounded-xl border p-1 ${isDark ? 'border-slate-700/80 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
             {users.map(user => (
               <label key={user._id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer ${isDark ? 'hover:bg-white/10' : 'hover:bg-white'}`}>
                 <input type="checkbox" checked={memberIds.includes(user._id)} onChange={() => toggleMember(user._id)} className={`h-4 w-4 rounded accent-primary-500 ${isDark ? 'border-white/30 bg-[#1a1a1a]' : 'border-slate-300 bg-white'}`} />

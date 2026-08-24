@@ -39,12 +39,12 @@ export default {
           'text-secondary': '#475569',
         },
         dark: {
-          bg: '#0a0a0a',
-          surface: '#1a1a1a',
-          card: '#242424',
-          border: '#2a2a2a',
-          text: '#ffffff',
-          'text-secondary': '#a3a3a3',
+          bg: '#080d19',
+          surface: '#111827',
+          card: '#1f2937',
+          border: '#334155',
+          text: '#f8fafc',
+          'text-secondary': '#cbd5e1',
         },
         eye: {
           bg: '#1a1410',

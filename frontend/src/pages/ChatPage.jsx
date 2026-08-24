@@ -829,7 +829,7 @@ const ChatPage = () => {
     <div className={`min-h-screen ${theme.background} transition-colors duration-500 ${isDark ? 'text-white' : ''}`}>
       <NotificationBanner enableNotifications={enableNotifications} theme={theme} isDark={isDark} />
       {/* Navbar */}
-      <nav className={`${theme.card} backdrop-blur-xl border-b ${isDark ? 'border-white/20' : theme.border} sticky top-0 z-50 transition-colors duration-500`}>
+      <nav className={`${theme.card} backdrop-blur-xl border-b ${isDark ? 'border-slate-700/80' : theme.border} sticky top-0 z-50 transition-colors duration-500`}>
         <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
           <div className="flex justify-between items-center h-14 sm:h-16">
             <div className="flex items-center gap-2 sm:gap-3">
@@ -904,8 +904,8 @@ const ChatPage = () => {
                   transition={{ type: 'spring', damping: 25 }}
                   className="fixed left-0 top-0 bottom-0 w-[280px] z-50 lg:hidden"
                 >
-                  <div className={`h-full ${theme.card} backdrop-blur-xl border-r ${isDark ? 'border-white/20' : theme.border} p-4 overflow-y-auto`}>
-                    <div className={`flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}`}>
+                  <div className={`h-full ${theme.card} backdrop-blur-xl border-r ${isDark ? 'border-slate-700/80' : theme.border} p-4 overflow-y-auto`}>
+                    <div className={`flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-slate-700/80' : theme.border}`}>
                       <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
                       <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
                       <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
@@ -919,22 +919,22 @@ const ChatPage = () => {
                         onChange={(event) => setConversationSearch(event.target.value)}
                         placeholder="Search chats..."
                         aria-label="Search chats"
-                        className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white placeholder:text-gray-400' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-500'}`}
+                        className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#172033] border-slate-600 text-slate-50 placeholder:text-slate-300' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-600'}`}
                       />
-                      <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white' : 'bg-white border-slate-300 text-slate-900'}`}>
+                      <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#172033] border-slate-600 text-slate-50' : 'bg-white border-slate-300 text-slate-900'}`}>
                         <option value="active">Active chats</option>
                         <option value="all">All chats</option>
                         <option value="archived">Archived chats</option>
                       </select>
                     </div>
-                    <div className="mb-4 border-b pb-3 border-gray-200 dark:border-white/10">
+                    <div className={`mb-4 border-b pb-3 ${isDark ? 'border-slate-700/80' : theme.border}`}>
                       <div className="flex items-center justify-between mb-2">
                         <span className={`text-xs font-semibold uppercase tracking-wide ${theme.textSecondary}`}>Groups</span>
                         <button type="button" onClick={() => setShowGroupCreator(true)} className="text-xs text-primary-500 hover:text-primary-600">+ New</button>
                       </div>
                       <div className="space-y-1">
                         {filteredGroups.map(group => (
-                          <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? 'bg-primary-100 dark:bg-primary-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                          <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? (isDark ? 'bg-violet-500/20 text-violet-100' : 'bg-primary-100 text-primary-900') : (isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100')}`}>
                             <span className="w-7 h-7 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold">{group.name.slice(0, 1).toUpperCase()}</span>
                             <span className={`truncate ${theme.text}`}>{group.name}</span>
                           </button>
@@ -943,9 +943,9 @@ const ChatPage = () => {
                     </div>
 
                     {loading ? (
-                      <div className="text-center text-gray-500 py-4 text-sm">Loading...</div>
+                      <div className={`text-center ${theme.textSecondary} py-4 text-sm`}>Loading...</div>
                     ) : filteredUsers.length === 0 ? (
-                      <div className="text-center text-gray-500 py-4 text-sm">No users found.</div>
+                      <div className={`text-center ${theme.textSecondary} py-4 text-sm`}>No users found.</div>
                     ) : (
                       <div className="space-y-1.5">
                         {filteredUsers.map((chatUser) => {
@@ -959,7 +959,7 @@ const ChatPage = () => {
                               key={chatUser._id}
                               whileHover={{ scale: 1.02 }}
                               onClick={() => selectUser(chatUser)}
-                              className={`flex items-center gap-3 p-2.5 rounded-xl border ${isDark ? 'border-white/10 hover:border-white/30' : 'border-transparent hover:border-light-border'} ${theme.cardHover} transition-all cursor-pointer group ${selectedUser?._id === chatUser._id ? (isDark ? 'border-white/40 bg-white/10' : 'border-primary-500/30 bg-primary-50/30') : ''}`}
+                              className={`flex items-center gap-3 p-2.5 rounded-xl border ${isDark ? 'border-slate-700/80 hover:border-violet-400/70' : 'border-slate-200 hover:border-primary-300'} ${theme.cardHover} transition-all cursor-pointer group ${selectedUser?._id === chatUser._id ? (isDark ? 'border-violet-300/80 bg-violet-500/15' : 'border-primary-500/40 bg-primary-50/70') : ''}`}
                             >
                               <div className="relative flex-shrink-0">
                                 <Avatar user={chatUser} size="md" theme={theme} isDark={isDark} />
@@ -978,7 +978,7 @@ const ChatPage = () => {
                                     {chatUser.name}
                                   </span>
                                   {isOnline(chatUser._id) && (
-                                    <span className="text-[7px] sm:text-[8px] text-green-500 font-semibold">● Online</span>
+                                    <span className={`text-[7px] sm:text-[8px] ${isDark ? 'text-emerald-300' : 'text-emerald-600'} font-semibold`}>● Online</span>
                                   )}
                                 </div>
                                 {isLatestFromThisUser && latestMessage && (
@@ -989,13 +989,13 @@ const ChatPage = () => {
                                 )}
                               </div>
                               <div className="flex items-center gap-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                <button type="button" title={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} aria-label={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'pinnedBy', !summary?.isPinned) }} className={`p-1 rounded ${summary?.isPinned ? 'text-amber-500' : 'text-gray-400 hover:text-amber-500'}`}>
+                                <button type="button" title={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} aria-label={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'pinnedBy', !summary?.isPinned) }} className={`p-1 rounded ${summary?.isPinned ? 'text-amber-400' : isDark ? 'text-slate-400 hover:text-amber-300 hover:bg-white/10' : 'text-slate-500 hover:text-amber-600 hover:bg-slate-100'}`}>
                                   <FiStar className="w-3.5 h-3.5" />
                                 </button>
-                                <button type="button" title={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} aria-label={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'mutedBy', !summary?.isMuted) }} className={`p-1 rounded ${summary?.isMuted ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                <button type="button" title={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} aria-label={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'mutedBy', !summary?.isMuted) }} className={`p-1 rounded ${summary?.isMuted ? 'text-sky-400' : isDark ? 'text-slate-400 hover:text-sky-300 hover:bg-white/10' : 'text-slate-500 hover:text-sky-600 hover:bg-slate-100'}`}>
                                   <FiVolumeX className="w-3.5 h-3.5" />
                                 </button>
-                                <button type="button" title={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} aria-label={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'archivedBy', !summary?.isArchived) }} className={`p-1 rounded ${summary?.isArchived ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}`}>
+                                <button type="button" title={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} aria-label={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'archivedBy', !summary?.isArchived) }} className={`p-1 rounded ${summary?.isArchived ? 'text-emerald-400' : isDark ? 'text-slate-400 hover:text-emerald-300 hover:bg-white/10' : 'text-slate-500 hover:text-emerald-600 hover:bg-slate-100'}`}>
                                   <FiArchive className="w-3.5 h-3.5" />
                                 </button>
                               </div>
@@ -1011,8 +1011,8 @@ const ChatPage = () => {
           </AnimatePresence>
 
           {/* Desktop Sidebar */}
-          <div className={`hidden lg:block lg:col-span-1 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-4 transition-colors duration-500 max-h-[70vh] overflow-y-auto`}>
-            <div className={`flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}`}>
+          <div className={`hidden lg:block lg:col-span-1 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-slate-700/80 shadow-2xl shadow-black/30' : `border ${theme.border}`} p-4 transition-colors duration-500 max-h-[70vh] overflow-y-auto`}>
+            <div className={`flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-slate-700/80' : theme.border}`}>
               <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
                               <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
               <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
@@ -1027,22 +1027,22 @@ const ChatPage = () => {
                 onChange={(event) => setConversationSearch(event.target.value)}
                 placeholder="Search chats..."
                 aria-label="Search chats"
-                className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white placeholder:text-gray-400' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-500'}`}
+                className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#172033] border-slate-600 text-slate-50 placeholder:text-slate-300' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-600'}`}
               />
-              <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white' : 'bg-white border-slate-300 text-slate-900'}`}>
+              <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#172033] border-slate-600 text-slate-50' : 'bg-white border-slate-300 text-slate-900'}`}>
                 <option value="active">Active chats</option>
                 <option value="all">All chats</option>
                 <option value="archived">Archived chats</option>
               </select>
             </div>
-            <div className="mb-4 border-b pb-3 border-gray-200 dark:border-white/10">
+            <div className={`mb-4 border-b pb-3 ${isDark ? 'border-slate-700/80' : theme.border}`}>
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-xs font-semibold uppercase tracking-wide ${theme.textSecondary}`}>Groups</span>
                 <button type="button" onClick={() => setShowGroupCreator(true)} className="text-xs text-primary-500 hover:text-primary-600">+ New</button>
               </div>
               <div className="space-y-1">
                 {filteredGroups.map(group => (
-                  <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? 'bg-primary-100 dark:bg-primary-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                  <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? (isDark ? 'bg-violet-500/20 text-violet-100' : 'bg-primary-100 text-primary-900') : (isDark ? 'hover:bg-white/10' : 'hover:bg-slate-100')}`}>
                     <span className="w-7 h-7 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold">{group.name.slice(0, 1).toUpperCase()}</span>
                     <span className={`truncate ${theme.text}`}>{group.name}</span>
                   </button>
@@ -1051,9 +1051,9 @@ const ChatPage = () => {
             </div>
 
             {loading ? (
-              <div className="text-center text-gray-500 py-4 text-sm">Loading users...</div>
+              <div className={`text-center ${theme.textSecondary} py-4 text-sm`}>Loading users...</div>
             ) : filteredUsers.length === 0 ? (
-              <div className="text-center text-gray-500 py-4 text-sm">No users found.</div>
+              <div className={`text-center ${theme.textSecondary} py-4 text-sm`}>No users found.</div>
             ) : (
               <div className="space-y-1.5">
                 {filteredUsers.map((chatUser) => {
@@ -1067,7 +1067,7 @@ const ChatPage = () => {
                       key={chatUser._id}
                       whileHover={{ scale: 1.02 }}
                       onClick={() => selectUser(chatUser)}
-                      className={`flex items-center gap-3 p-2.5 rounded-xl border ${isDark ? 'border-white/10 hover:border-white/30' : 'border-transparent hover:border-light-border'} ${theme.cardHover} transition-all cursor-pointer group ${selectedUser?._id === chatUser._id ? (isDark ? 'border-white/40 bg-white/10' : 'border-primary-500/30 bg-primary-50/30') : ''}`}
+                      className={`flex items-center gap-3 p-2.5 rounded-xl border ${isDark ? 'border-slate-700/80 hover:border-violet-400/70' : 'border-slate-200 hover:border-primary-300'} ${theme.cardHover} transition-all cursor-pointer group ${selectedUser?._id === chatUser._id ? (isDark ? 'border-violet-300/80 bg-violet-500/15' : 'border-primary-500/40 bg-primary-50/70') : ''}`}
                     >
                       <div className="relative flex-shrink-0">
                         <Avatar user={chatUser} size="md" theme={theme} isDark={isDark} />
@@ -1086,7 +1086,7 @@ const ChatPage = () => {
                             {chatUser.name}
                           </span>
                           {isOnline(chatUser._id) && (
-                            <span className="text-[7px] sm:text-[8px] text-green-500 font-semibold">● Online</span>
+                            <span className={`text-[7px] sm:text-[8px] ${isDark ? 'text-emerald-300' : 'text-emerald-600'} font-semibold`}>● Online</span>
                           )}
                         </div>
                         {isLatestFromThisUser && latestMessage && (
@@ -1104,11 +1104,11 @@ const ChatPage = () => {
           </div>
 
           {/* Chat Window - Full height on mobile with input at bottom */}
-          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
+          <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-slate-700/80 shadow-2xl shadow-black/30' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
             {(selectedUser || selectedGroup) ? (
               <>
                 {/* Chat Header */}
-                <div className={`flex items-center gap-2 sm:gap-3 pb-2 sm:pb-3 border-b ${isDark ? 'border-white/20' : theme.border} mb-2 sm:mb-4`}>
+                <div className={`flex items-center gap-2 sm:gap-3 pb-2 sm:pb-3 border-b ${isDark ? 'border-slate-700/80' : theme.border} mb-2 sm:mb-4`}>
                   <Avatar user={selectedUser || selectedGroup} size="md" theme={theme} isDark={isDark} />
                   <div className="flex-1 min-w-0">
                     <h3 className={`font-heading font-semibold ${theme.text} text-sm sm:text-base truncate`}>
@@ -1133,7 +1133,7 @@ const ChatPage = () => {
                         type="button"
                         onClick={loadOlderMessages}
                         disabled={loadingHistory}
-                        className={`rounded-full px-3 py-1 text-xs ${isDark ? 'bg-white/10 text-gray-200' : 'bg-gray-100 text-gray-600'} disabled:opacity-50`}
+                        className={`rounded-full px-3 py-1 text-xs ${isDark ? 'bg-slate-800 text-slate-100 border border-slate-600' : 'bg-slate-100 text-slate-800 border border-slate-200'} disabled:opacity-50`}
                       >
                         {loadingHistory ? 'Loading older messages…' : 'Load older messages'}
                       </button>
@@ -1154,8 +1154,8 @@ const ChatPage = () => {
                           isMyMessage
                             ? `bg-gradient-to-r ${theme.button} text-white`
                             : isDark
-                              ? 'bg-white/10 border border-white/20 text-white'
-                              : 'bg-gray-100 text-gray-800'
+                              ? 'bg-slate-800/80 border border-slate-600 text-slate-50'
+                              : 'bg-slate-100 text-slate-800 border border-slate-200'
                         }`}>
                           {isDeleted ? (
                             <div className="flex items-center gap-2">
@@ -1168,7 +1168,7 @@ const ChatPage = () => {
                           ) : (
                             <>
                               {hasReply && (
-                                <div className={`mb-1.5 pl-2 border-l-2 ${isMyMessage ? 'border-white/50' : 'border-gray-400 dark:border-gray-500'} text-xs opacity-70`}>
+                                <div className={`mb-1.5 pl-2 border-l-2 ${isMyMessage ? 'border-white/70' : (isDark ? 'border-slate-500' : 'border-slate-400')} text-xs opacity-70`}>
                                   <span className="font-medium">
                                     {replySenderName}:
                                   </span>
@@ -1302,7 +1302,7 @@ const ChatPage = () => {
                     </div>
                     <button
                       onClick={cancelReply}
-                      className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 p-1"
+                      className={`p-1 rounded ${isDark ? 'text-slate-400 hover:bg-white/10 hover:text-slate-100' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
                     >
                       ✕
                     </button>
@@ -1319,14 +1319,14 @@ const ChatPage = () => {
                   )}
 
                   <AIAssist messages={messages} draft={newMessage} onDraftChange={setNewMessage} />
-                  <form onSubmit={sendMessage} className={`flex gap-1 sm:gap-2 pt-2 sm:pt-3 border-t ${isDark ? 'border-white/20' : theme.border}`}>
+                  <form onSubmit={sendMessage} className={`flex gap-1 sm:gap-2 pt-2 sm:pt-3 border-t ${isDark ? 'border-slate-700/80' : theme.border}`}>
                     <div className="flex-1 flex items-center gap-1 sm:gap-2">
                       <input
                         type="text"
                         value={newMessage}
                         onChange={handleTyping}
                         placeholder={replyToMessage ? "Write a reply..." : uploadedAttachment ? "Add caption..." : "Type a message..."}
-                        className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base border focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all font-input min-h-[44px] ${isDark ? 'border-white/20 bg-[#1a1a1a] text-white placeholder:text-gray-400' : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-500'}`}
+                        className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base border focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all font-input min-h-[44px] ${isDark ? 'border-slate-600 bg-[#172033] text-slate-50 placeholder:text-slate-300' : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-600'}`}
                       />
                       <MediaUpload
                         onMediaUpload={handleMediaUpload}

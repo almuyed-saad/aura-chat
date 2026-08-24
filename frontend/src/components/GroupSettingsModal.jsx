@@ -16,11 +16,9 @@ const GroupSettingsModal = ({ group, users, currentUserId, onClose, onUpdated })
   const availableUsers = users.filter(user => !memberIds.has(String(user._id)))
 
   const fieldClass = `w-full rounded-xl border px-3 py-2 text-sm outline-none transition focus:ring-2 focus:ring-primary-500/40 disabled:cursor-not-allowed disabled:opacity-70 ${isDark
-    ? 'border-white/20 bg-[#1a1a1a] text-white placeholder:text-gray-400 focus:border-primary-400'
-    : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-500 focus:border-primary-500'}`
-  const buttonSecondary = isDark
-    ? 'text-gray-300 hover:bg-white/10 hover:text-white'
-    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+    ? 'border-slate-600 bg-[#172033] text-slate-50 placeholder:text-slate-300 focus:border-violet-300'
+    : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-600 focus:border-primary-500'}`
+  const buttonSecondary = isDark ? 'text-slate-300 hover:bg-white/10 hover:text-white' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-950'
 
   const saveDetails = async (event) => {
     event.preventDefault()
@@ -74,8 +72,8 @@ const GroupSettingsModal = ({ group, users, currentUserId, onClose, onUpdated })
 
   return (
     <div className="fixed inset-0 z-[80] bg-black/50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Group settings">
-      <div className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl ${theme.card} ${isDark ? 'border border-white/15' : 'border border-slate-200'} p-5 shadow-2xl space-y-5`}>
-        <div className={`flex items-center justify-between border-b pb-3 ${isDark ? 'border-white/15' : 'border-slate-200'}`}>
+      <div className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl ${theme.card} ${isDark ? 'border border-slate-700/80' : 'border border-slate-200'} p-5 shadow-2xl space-y-5`}>
+        <div className={`flex items-center justify-between border-b pb-3 ${isDark ? 'border-slate-700/80' : 'border-slate-200'}`}>
           <h2 className={`text-lg font-semibold ${theme.text}`}>Group settings</h2>
           <button type="button" onClick={onClose} className={`rounded-lg p-1 ${buttonSecondary}`} aria-label="Close">✕</button>
         </div>
@@ -84,8 +82,8 @@ const GroupSettingsModal = ({ group, users, currentUserId, onClose, onUpdated })
           <label className="block"><span className={`mb-1 block text-xs font-medium ${theme.textSecondary}`}>Details</span><textarea value={description} onChange={event => setDescription(event.target.value)} disabled={!canManage} maxLength={500} rows={3} className={fieldClass} /></label>
           {canManage && <button type="submit" disabled={saving} className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-50">{saving ? 'Saving…' : 'Save details'}</button>}
         </form>
-        {canManage && <div className={`border-t pt-4 ${isDark ? 'border-white/15' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Add member</p><div className="flex gap-2"><select value={memberId} onChange={event => setMemberId(event.target.value)} style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`${fieldClass} flex-1`}><option value="">Select a user</option>{availableUsers.map(user => <option key={user._id} value={user._id}>{user.name}</option>)}</select><button type="button" onClick={addMember} disabled={!memberId} className="rounded-xl bg-primary-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-50">Add</button></div></div>}
-        <div className={`border-t pt-4 ${isDark ? 'border-white/15' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Members</p><div className="space-y-2">{(group.members || []).map(member => <div key={member.user?._id || member.user} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'}`}><span className={`flex-1 text-sm ${theme.text}`}>{member.user?.name || 'Member'} <span className={`text-xs ${theme.textSecondary}`}>({member.role})</span></span>{canManage && member.role !== 'owner' && <span className="flex items-center gap-2"><button type="button" onClick={() => updateRole(member.user?._id || member.user, member.role === 'admin' ? 'member' : 'admin')} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-violet-300 hover:bg-violet-900/30' : 'text-violet-700 hover:bg-violet-50'}`}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button><button type="button" onClick={() => removeMember(member.user?._id || member.user)} className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30">Remove</button></span>}</div>)}</div></div>
+        {canManage && <div className={`border-t pt-4 ${isDark ? 'border-slate-700/80' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Add member</p><div className="flex gap-2"><select value={memberId} onChange={event => setMemberId(event.target.value)} style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`${fieldClass} flex-1`}><option value="">Select a user</option>{availableUsers.map(user => <option key={user._id} value={user._id}>{user.name}</option>)}</select><button type="button" onClick={addMember} disabled={!memberId} className="rounded-xl bg-primary-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-50">Add</button></div></div>}
+        <div className={`border-t pt-4 ${isDark ? 'border-slate-700/80' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Members</p><div className="space-y-2">{(group.members || []).map(member => <div key={member.user?._id || member.user} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isDark ? 'hover:bg-slate-800/70' : 'hover:bg-slate-50'}`}><span className={`flex-1 text-sm ${theme.text}`}>{member.user?.name || 'Member'} <span className={`text-xs ${theme.textSecondary}`}>({member.role})</span></span>{canManage && member.role !== 'owner' && <span className="flex items-center gap-2"><button type="button" onClick={() => updateRole(member.user?._id || member.user, member.role === 'admin' ? 'member' : 'admin')} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-violet-200 hover:bg-violet-900/40' : 'text-violet-700 hover:bg-violet-50'}`}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button><button type="button" onClick={() => removeMember(member.user?._id || member.user)} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-rose-300 hover:bg-rose-950/40' : 'text-rose-700 hover:bg-rose-50'}`}>Remove</button></span>}</div>)}</div></div>
         {!canManage && <p className={`text-xs ${theme.textSecondary}`}>Only group owners and admins can change group settings.</p>}
       </div>
     </div>
