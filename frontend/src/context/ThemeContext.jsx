@@ -7,9 +7,9 @@ const ThemeContext = createContext()
 // invalid double-prefixed class like `shadow-shadow-primary-500/30` that
 // silently rendered nothing - `shadow` below is now a complete, ready-to-use
 // class string, e.g. `shadow-xl shadow-primary-500/20`).
-// Dead `dark:` prefixed fragments were removed - this app never sets
-// Tailwind's `dark` class on <html>, it swaps `data-theme` instead, so those
-// fragments never did anything.
+// The app keeps a data-theme attribute for theme-aware design tokens and also
+// toggles Tailwind's `dark` class so every dark: utility stays synchronized
+// with the selected Dark theme.
 const themes = {
   purple: {
     name: 'Purple',
@@ -112,15 +112,17 @@ const themes = {
 export const ThemeProvider = ({ children }) => {
   const [currentTheme, setCurrentTheme] = useState(() => {
     const saved = localStorage.getItem('theme')
-    return saved || 'purple'
+    return themes[saved] ? saved : 'purple'
   })
 
   useEffect(() => {
     localStorage.setItem('theme', currentTheme)
     document.documentElement.setAttribute('data-theme', currentTheme)
+    document.documentElement.classList.toggle('dark', currentTheme === 'dark')
+    document.documentElement.style.colorScheme = currentTheme === 'dark' ? 'dark' : 'light'
   }, [currentTheme])
 
-  const theme = themes[currentTheme]
+  const theme = themes[currentTheme] || themes.purple
 
   return (
     <ThemeContext.Provider value={{ currentTheme, setCurrentTheme, theme, themes }}>
