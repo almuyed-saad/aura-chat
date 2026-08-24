@@ -9,7 +9,9 @@ require('dotenv').config();
 const { sendPushToUser } = require('./services/pushSender');
 const User = require('./models/User');
 const Message = require('./models/Message');
-const { isValidObjectId, validateMessagePayload } = require('./utils/validation');
+const Conversation = require('./models/Conversation');
+const { router: conversationRouter, participantKeyFor } = require('./routes/conversations');
+const { isValidObjectId, validateMessagePayload, MAX_MESSAGE_LENGTH } = require('./utils/validation');
 
 // ===== INITIALIZE APP =====
 const app = express();
@@ -70,6 +72,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/messages', require('./routes/messages'));
+app.use('/api/conversations', conversationRouter);
 app.use('/api/push', require('./routes/push'));
 
 app.use((req, res) => {
@@ -130,6 +133,35 @@ const removeUserSocket = (userId, socketId) => {
 };
 
 const isUserOnline = (userId) => userSocketMap.has(String(userId));
+
+const getMessagePreview = (message) => {
+  if (message.deleted) return 'Message deleted';
+  if (message.text) return message.text.slice(0, 400);
+  if (message.image) return 'Image';
+  if (message.video) return 'Video';
+  return 'Message';
+};
+
+const updateConversationSummary = async (message) => {
+  const senderId = String(message.sender);
+  const receiverId = String(message.receiver);
+  await Conversation.findOneAndUpdate(
+    { participantKey: participantKeyFor(senderId, receiverId) },
+    {
+      $set: {
+        lastMessage: message._id,
+        lastMessageText: getMessagePreview(message),
+        lastMessageSender: senderId,
+        lastMessageAt: message.createdAt || new Date()
+      },
+      $setOnInsert: {
+        participantKey: participantKeyFor(senderId, receiverId),
+        participants: [senderId, receiverId]
+      }
+    },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
+};
 
 // ===== SOCKET.IO AUTHENTICATION MIDDLEWARE =====
 io.use((socket, next) => {
@@ -202,6 +234,7 @@ io.on('connection', (socket) => {
       let message = clientMessageId
         ? await Message.findOne({ sender: socket.userId, clientMessageId })
         : null;
+      const isNewMessage = !message;
 
       if (!message) {
         const receiverOnline = isUserOnline(receiverId);
@@ -222,6 +255,7 @@ io.on('connection', (socket) => {
           read: false
         });
         await message.save();
+        await updateConversationSummary(message);
       }
 
       const populatedMessage = await Message.findById(message._id)
@@ -236,11 +270,20 @@ io.on('connection', (socket) => {
           : populatedMessage.reactions || {}
       };
 
+      if (!isNewMessage) {
+        return socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
+      }
+
       io.to(receiverId).emit('receiveMessage', messageToSend);
       io.to(socket.userId).except(socket.id).emit('receiveMessage', messageToSend);
       socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
 
-      if (!isUserOnline(receiverId)) {
+      const conversationSettings = await Conversation.findOne({
+        participantKey: participantKeyFor(socket.userId, receiverId)
+      }).select('mutedBy').lean();
+      const recipientMuted = conversationSettings?.mutedBy?.some(id => String(id) === receiverId);
+
+      if (!isUserOnline(receiverId) && !recipientMuted) {
         const senderUser = await User.findById(socket.userId).select('name');
         sendPushToUser(receiverId, {
           title: senderUser?.name || 'New message',
@@ -323,6 +366,43 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ===== EDIT MESSAGE =====
+  socket.on('editMessage', async (data = {}) => {
+    try {
+      const { messageId, text } = data;
+      const normalizedText = typeof text === 'string' ? text.trim() : '';
+      if (!isValidObjectId(messageId) || !normalizedText || normalizedText.length > MAX_MESSAGE_LENGTH) {
+        return socket.emit('messageError', { error: 'Invalid edited message' });
+      }
+
+      const message = await Message.findOne({
+        _id: messageId,
+        sender: socket.userId,
+        deleted: false
+      });
+      if (!message) return socket.emit('messageError', { error: 'Message not found' });
+
+      message.text = normalizedText;
+      message.edited = true;
+      message.editedAt = new Date();
+      await message.save();
+      await Conversation.updateOne(
+        { lastMessage: message._id },
+        { $set: { lastMessageText: getMessagePreview(message) } }
+      );
+
+      const updatedMessage = await Message.findById(messageId)
+        .populate('sender', 'name avatar')
+        .populate('receiver', 'name avatar')
+        .lean();
+      io.to(message.sender.toString()).emit('messageUpdated', updatedMessage);
+      io.to(message.receiver.toString()).emit('messageUpdated', updatedMessage);
+    } catch (error) {
+      console.error('❌ Edit message error:', error);
+      socket.emit('messageError', { error: 'Failed to edit message' });
+    }
+  });
+
   // ===== DELETE MESSAGE =====
   socket.on('deleteMessage', async (data = {}) => {
     try {
@@ -344,7 +424,11 @@ io.on('connection', (socket) => {
       message.image = '';
       message.video = '';
       await message.save();
-      
+      await Conversation.updateOne(
+        { lastMessage: message._id },
+        { $set: { lastMessageText: getMessagePreview(message) } }
+      );
+
       console.log('✅ Message marked as deleted');
 
       const updatedMessage = await Message.findById(messageId)
