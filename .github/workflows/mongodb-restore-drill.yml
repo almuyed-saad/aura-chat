@@ -1,0 +1,87 @@
+name: MongoDB restore drill
+
+on:
+  workflow_dispatch:
+    inputs:
+      backup_run_id:
+        description: 'Backup workflow run ID to download'
+        required: true
+        type: string
+      backup_artifact_name:
+        description: 'Backup artifact name from that run'
+        required: true
+        default: 'aura-mongodb-backup'
+        type: string
+      restore_target:
+        description: 'Safety acknowledgement: this must be a non-production database'
+        required: true
+        type: choice
+        options:
+          - staging
+          - test
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  MONGODB_TOOLS_VERSION: '100.12.0'
+
+jobs:
+  restore-drill:
+    if: ${{ inputs.restore_target == 'staging' || inputs.restore_target == 'test' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout restore verifier
+        uses: actions/checkout@v4
+
+      - name: Install MongoDB Database Tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-${MONGODB_TOOLS_VERSION}.tgz"
+          curl --fail --silent --show-error --location "$url" --output /tmp/mongodb-tools.tgz
+          mkdir -p /tmp/mongodb-tools
+          tar -xzf /tmp/mongodb-tools.tgz --strip-components=1 -C /tmp/mongodb-tools
+          echo "/tmp/mongodb-tools/bin" >> "$GITHUB_PATH"
+          mongorestore --version
+
+      - name: Download selected backup artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.backup_run_id }}
+          name: ${{ inputs.backup_artifact_name }}
+          path: backup
+
+      - name: Verify backup checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive=$(find backup -maxdepth 1 -type f -name '*.archive.gz' -print -quit)
+          test -n "$archive" || { echo 'No MongoDB archive found in the selected artifact' >&2; exit 1; }
+          checksum="${archive}.sha256"
+          test -s "$checksum" || { echo 'Backup checksum is missing' >&2; exit 1; }
+          sha256sum --check "$checksum"
+          echo "BACKUP_ARCHIVE=$archive" >> "$GITHUB_ENV"
+
+      - name: Restore into non-production target
+        env:
+          RESTORE_MONGO_URI: ${{ secrets.MONGO_RESTORE_URI }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${RESTORE_MONGO_URI:-}" || { echo 'MONGO_RESTORE_URI is not configured' >&2; exit 1; }
+          mongorestore --uri="$RESTORE_MONGO_URI" --archive="$BACKUP_ARCHIVE" --gzip --drop
+
+      - name: Validate restored database
+        env:
+          RESTORE_MONGO_URI: ${{ secrets.MONGO_RESTORE_URI }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd backend
+          npm install --omit=dev --ignore-scripts --no-audit --no-fund
+          RESTORE_MONGO_URI="$RESTORE_MONGO_URI" node ops/verify-restore.js
