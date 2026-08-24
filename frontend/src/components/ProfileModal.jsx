@@ -58,7 +58,7 @@ const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          className={`w-full max-w-md rounded-2xl p-5 sm:p-6 ${isDark ? 'bg-[#141414] border border-white/20' : 'bg-white border border-gray-200'}`}
+          className={`w-full max-w-md rounded-2xl p-5 sm:p-6 ${isDark ? 'bg-[#111827] border border-slate-700/80' : 'bg-white border border-gray-200'}`}
         >
           <div className="flex items-center justify-between mb-5">
             <h2 className={`text-lg font-heading font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -66,7 +66,7 @@ const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
             </h2>
             <button
               onClick={onClose}
-              className={`p-1.5 rounded-full ${isDark ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+              className={`p-1.5 rounded-full ${isDark ? 'text-slate-300 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-950 hover:bg-slate-100'}`}
             >
               <FiX className="w-5 h-5" />
             </button>
@@ -83,7 +83,7 @@ const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
           </div>
 
           {/* Avatar picker grid */}
-          <p className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
             Choose an avatar
           </p>
           <div className="grid grid-cols-5 gap-2 mb-5">
@@ -100,7 +100,7 @@ const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
           </div>
 
           {/* Nickname input */}
-          <p className={`text-xs font-medium mb-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <p className={`text-xs font-medium mb-2 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
             Nickname (shown in chats)
           </p>
           <input
@@ -109,13 +109,13 @@ const ProfileModal = ({ user, onClose, onSaved, theme, isDark }) => {
             onChange={(e) => setNickname(e.target.value)}
             maxLength={20}
             placeholder="Your display name"
-            className={`w-full px-3 py-2.5 rounded-xl border mb-5 ${isDark ? 'bg-[#1a1a1a] border-white/20 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+            className={`w-full px-3 py-2.5 rounded-xl border mb-5 ${isDark ? 'bg-[#172033] border-slate-600 text-slate-50 placeholder:text-slate-300' : 'bg-gray-50 border-gray-200 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
           />
 
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className={`flex-1 py-2.5 rounded-xl font-medium text-sm ${isDark ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'} transition`}
+              className={`flex-1 py-2.5 rounded-xl font-medium text-sm ${isDark ? 'bg-slate-800 text-slate-50 hover:bg-slate-700' : 'bg-slate-100 text-slate-800 hover:bg-slate-200'} transition`}
             >
               Cancel
             </button>

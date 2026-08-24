@@ -7,9 +7,9 @@ const ThemeContext = createContext()
 // invalid double-prefixed class like `shadow-shadow-primary-500/30` that
 // silently rendered nothing - `shadow` below is now a complete, ready-to-use
 // class string, e.g. `shadow-xl shadow-primary-500/20`).
-// Dead `dark:` prefixed fragments were removed - this app never sets
-// Tailwind's `dark` class on <html>, it swaps `data-theme` instead, so those
-// fragments never did anything.
+// The app keeps a data-theme attribute for theme-aware design tokens and also
+// toggles Tailwind's `dark` class so every dark: utility stays synchronized
+// with the selected Dark theme.
 const themes = {
   purple: {
     name: 'Purple',
@@ -20,7 +20,7 @@ const themes = {
     cardHover: 'hover:bg-violet-50/80',
     border: 'border-violet-200',
     text: 'text-slate-900',
-    textSecondary: 'text-slate-500',
+    textSecondary: 'text-slate-600',
     accent: 'text-purple-600',
     button: 'from-violet-500 via-purple-600 to-fuchsia-600',
     shadow: 'shadow-xl shadow-purple-500/20',
@@ -39,7 +39,7 @@ const themes = {
     cardHover: 'hover:bg-rose-50/80',
     border: 'border-rose-200',
     text: 'text-slate-900',
-    textSecondary: 'text-slate-500',
+    textSecondary: 'text-slate-600',
     accent: 'text-rose-600',
     button: 'from-rose-500 via-red-500 to-pink-600',
     shadow: 'shadow-xl shadow-rose-500/20',
@@ -58,7 +58,7 @@ const themes = {
     cardHover: 'hover:bg-pink-50/80',
     border: 'border-pink-200',
     text: 'text-slate-900',
-    textSecondary: 'text-slate-500',
+    textSecondary: 'text-slate-600',
     accent: 'text-pink-500',
     button: 'from-pink-400 via-fuchsia-400 to-rose-400',
     shadow: 'shadow-xl shadow-pink-400/20',
@@ -70,23 +70,23 @@ const themes = {
   },
   dark: {
     name: 'Dark',
-    primary: 'from-violet-600 via-purple-700 to-fuchsia-700',
-    primaryLight: 'from-violet-500 via-purple-600 to-fuchsia-600',
-    background: 'bg-black',
-    card: 'bg-[#0d0d0d]',
-    cardHover: 'hover:bg-[#1a1a1a]',
-    border: 'border-white/15',
-    borderLight: 'border-white/10',
-    text: 'text-white',
-    textSecondary: 'text-gray-400',
-    accent: 'text-violet-400',
-    button: 'from-violet-600 via-purple-700 to-fuchsia-700',
-    shadow: 'shadow-2xl shadow-violet-500/10',
+    primary: 'from-violet-500 via-fuchsia-500 to-pink-500',
+    primaryLight: 'from-violet-400 via-fuchsia-400 to-pink-400',
+    background: 'bg-[#080d19]',
+    card: 'bg-[#111827]/95',
+    cardHover: 'hover:bg-[#1f2937]',
+    border: 'border-slate-700/80',
+    borderLight: 'border-slate-700/60',
+    text: 'text-slate-50',
+    textSecondary: 'text-slate-300',
+    accent: 'text-violet-300',
+    button: 'from-violet-500 via-fuchsia-500 to-pink-500',
+    shadow: 'shadow-2xl shadow-violet-500/20',
     emoji: '🌙',
     logo: 'text-white',
-    avatar: 'from-violet-600 to-fuchsia-700',
-    userCard: 'border-white/10 hover:border-white/30',
-    inputBg: 'bg-[#1a1a1a]',
+    avatar: 'from-violet-500 to-fuchsia-600',
+    userCard: 'border-slate-700/70 hover:border-violet-400/70',
+    inputBg: 'bg-[#172033]',
   },
   light: {
     name: 'Light',
@@ -97,7 +97,7 @@ const themes = {
     cardHover: 'hover:bg-sky-50/80',
     border: 'border-sky-200',
     text: 'text-slate-900',
-    textSecondary: 'text-slate-500',
+    textSecondary: 'text-slate-600',
     accent: 'text-blue-600',
     button: 'from-sky-400 via-blue-500 to-cyan-500',
     shadow: 'shadow-xl shadow-blue-400/20',
@@ -112,15 +112,17 @@ const themes = {
 export const ThemeProvider = ({ children }) => {
   const [currentTheme, setCurrentTheme] = useState(() => {
     const saved = localStorage.getItem('theme')
-    return saved || 'purple'
+    return themes[saved] ? saved : 'purple'
   })
 
   useEffect(() => {
     localStorage.setItem('theme', currentTheme)
     document.documentElement.setAttribute('data-theme', currentTheme)
+    document.documentElement.classList.toggle('dark', currentTheme === 'dark')
+    document.documentElement.style.colorScheme = currentTheme === 'dark' ? 'dark' : 'light'
   }, [currentTheme])
 
-  const theme = themes[currentTheme]
+  const theme = themes[currentTheme] || themes.purple
 
   return (
     <ThemeContext.Provider value={{ currentTheme, setCurrentTheme, theme, themes }}>
