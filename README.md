@@ -268,9 +268,15 @@ npm run dev
 | `VITE_SOCKET_URL` | Optional Socket.io URL; defaults to `VITE_API_URL` |
 | `VITE_VAPID_PUBLIC_KEY` | VAPID public key for push notifications |
 | `VITE_CLOUDINARY_CLOUD_NAME` | Public Cloudinary cloud name |
-| `VITE_CLOUDINARY_UPLOAD_PRESET` | Restricted unsigned Cloudinary upload preset used for direct browser uploads |
+| `VITE_CLOUDINARY_UPLOAD_PRESET` | Restricted unsigned Cloudinary upload preset used for direct browser uploads; enable image, video, audio, and raw/document resource types |
 
 ---
+
+## Rich media
+
+Aura supports images up to 10 MB, videos up to 25 MB, audio and voice notes up to 10 MB, and common documents up to 10 MB. Voice notes are recorded in the browser for a maximum of two minutes. Rich attachments are validated on both the client and server and are stored with their public URL, resource type, MIME type, filename, size, duration, and dimensions where available.
+
+The unsigned Cloudinary upload preset must explicitly allow the image, video, and raw resource types required by the deployment. The public cloud name, preset name, and VAPID public key are client-visible configuration; no Cloudinary API secret is included in the frontend.
 
 ## Testing
 

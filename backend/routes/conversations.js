@@ -32,6 +32,7 @@ router.get('/', auth, async (req, res) => {
             text: 1,
             image: 1,
             video: 1,
+            attachment: 1,
             deleted: 1,
             sender: 1,
             createdAt: 1
@@ -63,7 +64,7 @@ router.get('/', auth, async (req, res) => {
         return {
           user: otherUser,
           lastMessage: {
-            text: message.deleted ? 'Message deleted' : (message.text || (message.image ? 'Image' : (message.video ? 'Video' : 'Message'))),
+            text: message.deleted ? 'Message deleted' : (message.text || (message.attachment?.resourceType === 'audio' ? 'Voice note' : message.attachment?.resourceType === 'raw' ? 'Document' : message.image || message.attachment?.resourceType === 'image' ? 'Image' : message.video || message.attachment?.resourceType === 'video' ? 'Video' : 'Message')),
             senderId: String(message.sender),
             createdAt: message.createdAt
           },

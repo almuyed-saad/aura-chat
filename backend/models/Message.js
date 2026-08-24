@@ -37,6 +37,17 @@ const MessageSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  attachment: {
+    url: { type: String, maxlength: 2048 },
+    publicId: { type: String, maxlength: 255 },
+    resourceType: { type: String, enum: ['image', 'video', 'audio', 'raw'] },
+    mimeType: { type: String, maxlength: 150 },
+    fileName: { type: String, maxlength: 255 },
+    fileSize: { type: Number, min: 0, max: 25 * 1024 * 1024 },
+    duration: { type: Number, min: 0 },
+    width: { type: Number, min: 0 },
+    height: { type: Number, min: 0 }
+  },
   reactions: {
     type: Map,
     of: String,
