@@ -9,9 +9,16 @@ const getAiStatus = () => ({
 });
 
 const extractContent = (data) => {
-  const content = data?.choices?.[0]?.message?.content;
+  const message = data?.choices?.[0]?.message;
+  const content = message?.content;
   if (typeof content === 'string') return content.trim();
-  if (Array.isArray(content)) return content.map(part => part?.text || '').join('').trim();
+  if (Array.isArray(content)) {
+    return content.map(part => {
+      if (typeof part === 'string') return part;
+      return part?.text || part?.content || '';
+    }).join('').trim();
+  }
+  if (typeof data?.choices?.[0]?.text === 'string') return data.choices[0].text.trim();
   return '';
 };
 
@@ -35,7 +42,6 @@ const callAi = async ({ system, user, maxTokens = 500, responseFormat } = {}) =>
       },
       body: JSON.stringify({
         model,
-        temperature: 0.4,
         ...tokenLimit,
         messages: [
           { role: 'system', content: system },
@@ -64,15 +70,42 @@ const callAi = async ({ system, user, maxTokens = 500, responseFormat } = {}) =>
   }
 };
 
-const sanitizeMessages = (messages) => {
+const parseSmartReplies = (content) => {
+  const candidates = [content, content.replace(/^```(?:json)?\s*|\s*```$/gi, '').trim()];
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      const values = Array.isArray(parsed) ? parsed : parsed?.replies;
+      if (Array.isArray(values)) return values;
+    } catch {
+      // Fall back to line parsing for providers that ignore JSON mode.
+    }
+  }
+  return content
+    .split(/\r?\n+/)
+    .map(item => item.replace(/^[-*\d.)\s]+/, '').trim())
+    .filter(Boolean);
+};
+
+const sanitizeMessages = (messages, currentUserId) => {
   if (!Array.isArray(messages)) return [];
+  const normalizedCurrentUserId = currentUserId ? String(currentUserId) : '';
   return messages
     .filter(message => !message?.deleted && typeof message?.text === 'string' && message.text.trim())
     .slice(-40)
-    .map(message => ({
-      role: message.sender === 'me' || message.role === 'user' ? 'user' : 'assistant',
-      content: message.text.trim().slice(0, 1000)
-    }));
+    .map(message => {
+      const sender = typeof message.sender === 'object'
+        ? message.sender?._id || message.sender?.id
+        : message.sender;
+      const isCurrentUser = message.isMine === true
+        || message.role === 'user'
+        || message.role === 'me'
+        || (normalizedCurrentUserId && sender && String(sender) === normalizedCurrentUserId);
+      return {
+        role: isCurrentUser ? 'user' : 'assistant',
+        content: message.text.trim().slice(0, 1000)
+      };
+    });
 };
 
-module.exports = { callAi, getAiStatus, isAiConfigured, sanitizeMessages };
+module.exports = { callAi, getAiStatus, isAiConfigured, parseSmartReplies, sanitizeMessages };

@@ -3,7 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const rateLimit = require('../middleware/rateLimit');
 const User = require('../models/User');
-const { callAi, getAiStatus, sanitizeMessages } = require('../services/aiService');
+const { callAi, getAiStatus, parseSmartReplies, sanitizeMessages } = require('../services/aiService');
 
 const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: 'AI request limit reached. Please try again shortly.' });
 const textValue = (value, max = 4000) => typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -35,18 +35,18 @@ router.patch('/preferences', auth, async (req, res) => {
 });
 
 router.post('/smart-replies', auth, requireAiConsent, aiLimiter, async (req, res) => {
-  const messages = sanitizeMessages(req.body?.messages);
+  const messages = sanitizeMessages(req.body?.messages, req.user.id);
   if (!messages.length) return res.status(400).json({ error: 'Conversation context is required' });
   try {
     const content = await callAi({
       system: 'You suggest concise, natural replies for a chat app. Return JSON only as {"replies":["..."]}. Provide exactly three replies, each no more than 80 characters. Do not include sensitive inferences or claims not present in the conversation.',
       user: JSON.stringify(messages),
-      maxTokens: 300,
-      responseFormat: { type: 'json_object' }
+      maxTokens: 300
     });
-    let parsed;
-    try { parsed = JSON.parse(content); } catch { parsed = { replies: content.split(/\n+/).map(item => item.replace(/^[-*\d.)\s]+/, '').trim()) }; }
-    const replies = Array.isArray(parsed.replies) ? parsed.replies.filter(item => typeof item === 'string' && item.trim()).slice(0, 3).map(item => item.trim().slice(0, 120)) : [];
+    const replies = parseSmartReplies(content)
+      .filter(item => typeof item === 'string' && item.trim())
+      .slice(0, 3)
+      .map(item => item.trim().slice(0, 120));
     res.json({ replies });
   } catch (error) {
     console.error('AI smart-replies error:', error.code || error.message);
@@ -55,7 +55,7 @@ router.post('/smart-replies', auth, requireAiConsent, aiLimiter, async (req, res
 });
 
 router.post('/summarize', auth, requireAiConsent, aiLimiter, async (req, res) => {
-  const messages = sanitizeMessages(req.body?.messages);
+  const messages = sanitizeMessages(req.body?.messages, req.user.id);
   if (!messages.length) return res.status(400).json({ error: 'Conversation context is required' });
   try {
     const summary = await callAi({
