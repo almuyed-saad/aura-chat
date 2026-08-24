@@ -4,6 +4,7 @@ const auth = require('../middleware/auth');
 const Message = require('../models/Message');
 const Group = require('../models/Group');
 const { isValidObjectId } = require('../utils/validation');
+const { beforeFilter, pageResult, parsePagination } = require('../utils/pagination');
 
 const canAccessMessage = async (message, userId) => {
   if (!message) return false;
@@ -71,27 +72,35 @@ router.get('/:userId', auth, async (req, res) => {
       { read: true, status: 'read', readAt: new Date() }
     );
 
-    const messages = await Message.find({
+    const pagination = parsePagination(req.query);
+    if (pagination.error) return res.status(400).json({ error: pagination.error });
+    const conversationFilter = {
       $or: [
         { sender: currentUserId, receiver: userId },
         { sender: userId, receiver: currentUserId }
       ]
-    })
+    };
+    const query = pagination.enabled && pagination.before
+      ? { $and: [conversationFilter, beforeFilter(pagination.before)] }
+      : conversationFilter;
+    const messages = await Message.find(query)
       .populate('sender', 'name avatar')
       .populate('receiver', 'name avatar')
       .populate('deletedBy', 'name')
       .populate('replyTo', 'text sender')
       .populate('replyToSender', 'name')
-      .sort({ createdAt: 1 });
+      .sort(pagination.enabled ? { createdAt: -1, _id: -1 } : { createdAt: 1 })
+      .limit(pagination.enabled ? pagination.limit + 1 : 0);
 
-    res.json(messages.map(message => {
+    const normalized = messages.map(message => {
       const obj = message.toObject();
       return {
         ...obj,
         reactions: obj.reactions instanceof Map ? Object.fromEntries(obj.reactions) : obj.reactions || {},
         isStarred: obj.starredBy?.some(id => String(id) === String(currentUserId)) || false
       };
-    }));
+    });
+    res.json(pagination.enabled ? pageResult(normalized, pagination.limit) : normalized);
   } catch (error) {
     console.error('Direct messages error:', error);
     res.status(500).json({ error: 'Unable to load messages' });

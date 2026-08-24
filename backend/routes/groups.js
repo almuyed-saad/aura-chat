@@ -7,6 +7,7 @@ const User = require('../models/User');
 const Message = require('../models/Message');
 const Notification = require('../models/Notification');
 const { isValidObjectId } = require('../utils/validation');
+const { beforeFilter, pageResult, parsePagination } = require('../utils/pagination');
 
 const memberFor = (group, userId) => group.members.find(member => String(member.user) === String(userId));
 const canManage = (group, userId) => ['owner', 'admin'].includes(memberFor(group, userId)?.role);
@@ -55,18 +56,25 @@ router.get('/:groupId/messages', auth, async (req, res) => {
     const group = await Group.findOne({ _id: req.params.groupId, 'members.user': req.user.id }).select('_id');
     if (!group) return res.status(403).json({ error: 'You are not a member of this group' });
 
-    const messages = await Message.find({ group: group._id })
+    const pagination = parsePagination(req.query);
+    if (pagination.error) return res.status(400).json({ error: pagination.error });
+    const groupFilter = { group: group._id };
+    const query = pagination.enabled && pagination.before
+      ? { $and: [groupFilter, beforeFilter(pagination.before)] }
+      : groupFilter;
+    const messages = await Message.find(query)
       .populate('sender', 'name avatar')
       .populate('replyTo', 'text sender')
       .populate('replyToSender', 'name')
-      .sort({ createdAt: 1 })
-      .limit(500)
+      .sort(pagination.enabled ? { createdAt: -1, _id: -1 } : { createdAt: 1 })
+      .limit(pagination.enabled ? pagination.limit + 1 : 500)
       .lean();
-    res.json(messages.map(message => ({
+    const normalized = messages.map(message => ({
       ...message,
       reactions: message.reactions instanceof Map ? Object.fromEntries(message.reactions) : message.reactions || {},
       isStarred: message.starredBy?.some(id => String(id) === String(req.user.id)) || false
-    })));
+    }));
+    res.json(pagination.enabled ? pageResult(normalized, pagination.limit) : normalized);
   } catch (error) {
     console.error('Group messages error:', error);
     res.status(500).json({ error: 'Unable to load group messages' });
