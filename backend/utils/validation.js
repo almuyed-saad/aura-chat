@@ -54,9 +54,14 @@ const isSafeMediaUrl = (value) => {
   }
 };
 
-const validateMessagePayload = ({ receiverId, text, image, video, attachment, replyTo } = {}) => {
-  if (!isValidObjectId(receiverId)) {
-    return { valid: false, message: 'Invalid recipient' };
+const validateMessagePayload = ({ receiverId, groupId, text, image, video, attachment, replyTo, threadRoot, mentions } = {}) => {
+  const hasReceiver = isValidObjectId(receiverId);
+  const hasGroup = isValidObjectId(groupId);
+  if (hasReceiver && hasGroup) {
+    return { valid: false, message: 'Choose either a recipient or a group' };
+  }
+  if (!hasReceiver && !hasGroup) {
+    return { valid: false, message: receiverId ? 'Invalid recipient' : 'A valid recipient or group is required' };
   }
 
   const normalizedText = typeof text === 'string' ? text.trim() : '';
@@ -100,19 +105,32 @@ const validateMessagePayload = ({ receiverId, text, image, video, attachment, re
     return { valid: false, message: 'Invalid video URL' };
   }
 
+  const normalizedMentions = Array.isArray(mentions)
+    ? [...new Set(mentions.filter(isValidObjectId).map(String))].slice(0, 20)
+    : [];
+  if (Array.isArray(mentions) && normalizedMentions.length !== mentions.length) {
+    return { valid: false, message: 'Invalid mentions' };
+  }
+
   if (replyTo && !isValidObjectId(replyTo)) {
     return { valid: false, message: 'Invalid reply reference' };
+  }
+  if (threadRoot && !isValidObjectId(threadRoot)) {
+    return { valid: false, message: 'Invalid thread reference' };
   }
 
   return {
     valid: true,
     value: {
-      receiverId: String(receiverId),
+      receiverId: hasReceiver ? String(receiverId) : null,
+      groupId: hasGroup ? String(groupId) : null,
       text: normalizedText,
       image: normalizedImage,
       video: normalizedVideo,
       attachment: normalizedAttachment,
-      replyTo: replyTo || null
+      replyTo: replyTo || null,
+      threadRoot: threadRoot || null,
+      mentions: normalizedMentions
     }
   };
 };

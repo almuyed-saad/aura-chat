@@ -10,7 +10,10 @@ const { sendPushToUser } = require('./services/pushSender');
 const User = require('./models/User');
 const Message = require('./models/Message');
 const Conversation = require('./models/Conversation');
+const Group = require('./models/Group');
+const Notification = require('./models/Notification');
 const { router: conversationRouter, participantKeyFor } = require('./routes/conversations');
+const { memberFor } = require('./routes/groups');
 const { isValidObjectId, validateMessagePayload, MAX_MESSAGE_LENGTH } = require('./utils/validation');
 
 // ===== INITIALIZE APP =====
@@ -73,6 +76,9 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/messages', require('./routes/messages'));
 app.use('/api/conversations', conversationRouter);
+app.use('/api/groups', require('./routes/groups').router);
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/safety', require('./routes/safety'));
 app.use('/api/push', require('./routes/push'));
 
 app.use((req, res) => {
@@ -144,6 +150,30 @@ const getMessagePreview = (message) => {
   return 'Message';
 };
 
+const groupRoom = (groupId) => `group:${String(groupId)}`;
+
+const updateGroupSummary = async (message) => {
+  if (!message.group) return;
+  await Group.findByIdAndUpdate(message.group, {
+    $set: {
+      lastMessage: message._id,
+      lastMessageText: getMessagePreview(message),
+      lastMessageSender: message.sender,
+      lastMessageAt: message.createdAt || new Date()
+    }
+  });
+};
+
+const isGroupMember = async (groupId, userId) => {
+  if (!isValidObjectId(groupId)) return null;
+  return Group.findOne({ _id: groupId, 'members.user': userId });
+};
+
+const createUserNotifications = async (notifications) => {
+  if (!notifications.length) return;
+  await Notification.insertMany(notifications, { ordered: false });
+};
+
 const updateConversationSummary = async (message) => {
   const senderId = String(message.sender);
   const receiverId = String(message.receiver);
@@ -190,11 +220,24 @@ io.on('connection', (socket) => {
 
   addUserSocket(socket.userId, socket.id);
   socket.join(socket.userId);
+  Group.find({ 'members.user': socket.userId }).select('_id').lean()
+    .then(groups => groups.forEach(group => socket.join(groupRoom(group._id))))
+    .catch(error => console.error('Group room join error:', error.message));
 
   // ===== JOIN ROOM (for reconnects) =====
   // The payload is intentionally ignored. Socket identity comes from the JWT.
   socket.on('joinRoom', () => {
     socket.join(socket.userId);
+  });
+
+  socket.on('joinGroup', async ({ groupId } = {}) => {
+    const group = await isGroupMember(groupId, socket.userId);
+    if (!group) return socket.emit('groupError', { error: 'You are not a member of this group' });
+    socket.join(groupRoom(groupId));
+  });
+
+  socket.on('leaveGroup', ({ groupId } = {}) => {
+    if (isValidObjectId(groupId)) socket.leave(groupRoom(groupId));
   });
 
   const messageRateWindow = { startedAt: Date.now(), count: 0 };
@@ -223,26 +266,40 @@ io.on('connection', (socket) => {
         return socket.emit('messageError', { clientMessageId: data.clientMessageId || null, error: validation.message });
       }
 
-      const { receiverId, text, image, video, replyTo } = validation.value;
+      const { receiverId, groupId, text, image, video, replyTo, threadRoot, mentions } = validation.value;
+      const isGroupMessage = Boolean(groupId);
       const clientMessageId = typeof data.clientMessageId === 'string'
         ? data.clientMessageId.trim().slice(0, 100)
         : '';
 
-      const receiver = await User.findById(receiverId).select('_id');
-      if (!receiver) {
-        return socket.emit('messageError', { clientMessageId: clientMessageId || null, error: 'Recipient not found' });
+      const receiver = receiverId ? await User.findById(receiverId).select('_id blockedUsers') : null;
+      const senderUser = await User.findById(socket.userId).select('_id blockedUsers name');
+      const group = isGroupMessage ? await isGroupMember(groupId, socket.userId) : null;
+      if ((!isGroupMessage && !receiver) || (isGroupMessage && !group)) {
+        return socket.emit('messageError', { clientMessageId: clientMessageId || null, error: isGroupMessage ? 'Group not found or access denied' : 'Recipient not found' });
+      }
+      if (!isGroupMessage && (receiver.blockedUsers?.some(id => String(id) === socket.userId) || senderUser?.blockedUsers?.some(id => String(id) === receiverId))) {
+        return socket.emit('messageError', { clientMessageId: clientMessageId || null, error: 'Messaging is unavailable for this user' });
       }
 
       let message = clientMessageId
         ? await Message.findOne({ sender: socket.userId, clientMessageId })
         : null;
       const isNewMessage = !message;
+      let threadParent = null;
+      if (threadRoot) {
+        threadParent = await Message.findById(threadRoot).select('sender receiver group');
+        const sameGroup = isGroupMessage && threadParent?.group && String(threadParent.group) === String(groupId);
+        const sameDirect = !isGroupMessage && threadParent && !threadParent.group && ((String(threadParent.sender) === socket.userId && String(threadParent.receiver) === receiverId) || (String(threadParent.sender) === receiverId && String(threadParent.receiver) === socket.userId));
+        if (!sameGroup && !sameDirect) return socket.emit('messageError', { clientMessageId: clientMessageId || null, error: 'Invalid thread' });
+      }
 
       if (!message) {
-        const receiverOnline = isUserOnline(receiverId);
+        const receiverOnline = isGroupMessage || isUserOnline(receiverId);
         message = new Message({
           sender: socket.userId,
-          receiver: receiverId,
+          receiver: receiverId || null,
+          group: groupId || null,
           clientMessageId: clientMessageId || undefined,
           text,
           image,
@@ -253,17 +310,22 @@ io.on('connection', (socket) => {
           replyTo,
           replyToText: typeof data.replyToText === 'string' ? data.replyToText.trim().slice(0, 500) : '',
           replyToSender: isValidObjectId(data.replyToSender) ? data.replyToSender : null,
+          threadRoot,
+          mentions,
           status: receiverOnline ? 'delivered' : 'sent',
           deliveredAt: receiverOnline ? new Date() : null,
           read: false
         });
         await message.save();
-        await updateConversationSummary(message);
+        if (isGroupMessage) await updateGroupSummary(message);
+        else await updateConversationSummary(message);
       }
 
       const populatedMessage = await Message.findById(message._id)
         .populate('sender', 'name avatar')
         .populate('receiver', 'name avatar')
+        .populate('group', 'name avatar')
+        .populate('mentions', 'name avatar')
         .lean();
 
       const messageToSend = {
@@ -277,31 +339,59 @@ io.on('connection', (socket) => {
         return socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
       }
 
-      io.to(receiverId).emit('receiveMessage', messageToSend);
-      io.to(socket.userId).except(socket.id).emit('receiveMessage', messageToSend);
-      socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
+      if (isGroupMessage) {
+        io.to(groupRoom(groupId)).except(socket.id).emit('receiveMessage', messageToSend);
+        socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
 
-      const conversationSettings = await Conversation.findOne({
-        participantKey: participantKeyFor(socket.userId, receiverId)
-      }).select('mutedBy').lean();
-      const recipientMuted = conversationSettings?.mutedBy?.some(id => String(id) === receiverId);
+        const memberIds = group.members.map(member => String(member.user));
+        const mentionedUserIds = mentions.filter(userId => memberIds.includes(String(userId)) && String(userId) !== socket.userId);
+        await createUserNotifications(mentionedUserIds.map(userId => ({
+          user: userId,
+          actor: socket.userId,
+          type: 'mention',
+          text: `${group.name}: ${text ? text.slice(0, 120) : 'You were mentioned in a message'}`,
+          entityId: message._id,
+          entityType: 'message'
+        })));
+        mentionedUserIds.forEach(userId => io.to(String(userId)).emit('notificationCreated', { type: 'mention', message: messageToSend, group: { _id: group._id, name: group.name } }));
+      } else {
+        io.to(receiverId).emit('receiveMessage', messageToSend);
+        io.to(socket.userId).except(socket.id).emit('receiveMessage', messageToSend);
+        socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
 
-      if (!isUserOnline(receiverId) && !recipientMuted) {
-        const senderUser = await User.findById(socket.userId).select('name');
-        sendPushToUser(receiverId, {
-          title: senderUser?.name || 'New message',
-          body: text ? text.slice(0, 100) : getMessagePreview(message),
-          senderId: socket.userId,
-          url: '/'
-        }).catch(err => console.error('❌ Push trigger failed:', err));
+        const conversationSettings = await Conversation.findOne({
+          participantKey: participantKeyFor(socket.userId, receiverId)
+        }).select('mutedBy').lean();
+        const recipientMuted = conversationSettings?.mutedBy?.some(id => String(id) === receiverId);
+
+        if (!isUserOnline(receiverId) && !recipientMuted) {
+          sendPushToUser(receiverId, {
+            title: senderUser?.name || 'New message',
+            body: text ? text.slice(0, 100) : getMessagePreview(message),
+            senderId: socket.userId,
+            url: '/'
+          }).catch(err => console.error('❌ Push trigger failed:', err));
+        }
+
+        const unreadCount = await Message.countDocuments({
+          receiver: receiverId,
+          sender: socket.userId,
+          read: false
+        });
+        io.to(receiverId).emit('unreadCount', { senderId: socket.userId, count: unreadCount });
       }
 
-      const unreadCount = await Message.countDocuments({
-        receiver: receiverId,
-        sender: socket.userId,
-        read: false
-      });
-      io.to(receiverId).emit('unreadCount', { senderId: socket.userId, count: unreadCount });
+      if (threadParent && String(threadParent.sender) !== socket.userId) {
+        await createUserNotifications([{
+          user: String(threadParent.sender),
+          actor: socket.userId,
+          type: 'reply',
+          text: `${senderUser?.name || 'Someone'} replied to your message`,
+          entityId: message._id,
+          entityType: 'message'
+        }]);
+        io.to(String(threadParent.sender)).emit('notificationCreated', { type: 'reply', message: messageToSend });
+      }
     } catch (error) {
       console.error('❌ Message error:', error);
       socket.emit('messageError', {
@@ -312,8 +402,14 @@ io.on('connection', (socket) => {
   });
 
   // ===== TYPING INDICATOR =====
-  const emitTyping = (data = {}, isTyping) => {
+  const emitTyping = async (data = {}, isTyping) => {
     const receiverId = String(data.receiverId || '');
+    const groupId = String(data.groupId || '');
+    if (isValidObjectId(groupId)) {
+      const group = await isGroupMember(groupId, socket.userId);
+      if (group) io.to(groupRoom(groupId)).except(socket.id).emit('typing', { userId: socket.userId, groupId, isTyping });
+      return;
+    }
     if (!isValidObjectId(receiverId) || receiverId === socket.userId) return;
     io.to(receiverId).emit('typing', { userId: socket.userId, isTyping });
   };
@@ -329,11 +425,14 @@ io.on('connection', (socket) => {
         return socket.emit('reactionError', { error: 'Invalid reaction payload' });
       }
 
-      const message = await Message.findOne({
-        _id: messageId,
-        $or: [{ sender: socket.userId }, { receiver: socket.userId }]
-      });
+      const message = await Message.findById(messageId);
       if (!message) {
+        return socket.emit('reactionError', { error: 'Message not found' });
+      }
+      if (message.group) {
+        const group = await isGroupMember(message.group, socket.userId);
+        if (!group) return socket.emit('reactionError', { error: 'You are not a group member' });
+      } else if (String(message.sender) !== socket.userId && String(message.receiver) !== socket.userId) {
         return socket.emit('reactionError', { error: 'Message not found' });
       }
 
@@ -360,12 +459,44 @@ io.on('connection', (socket) => {
       };
       
       const senderId = message.sender.toString();
-      const receiverId = message.receiver.toString();
-      io.to(senderId).emit('reactionUpdated', messageToSend);
-      io.to(receiverId).emit('reactionUpdated', messageToSend);
+      if (message.group) io.to(groupRoom(message.group)).emit('reactionUpdated', messageToSend);
+      else {
+        const receiverId = message.receiver.toString();
+        io.to(senderId).emit('reactionUpdated', messageToSend);
+        io.to(receiverId).emit('reactionUpdated', messageToSend);
+      }
       
     } catch (error) {
       console.error('❌ Reaction error:', error);
+    }
+  });
+
+  // ===== STAR MESSAGE =====
+  socket.on('starMessage', async ({ messageId, starred } = {}) => {
+    try {
+      if (!isValidObjectId(messageId) || typeof starred !== 'boolean') return socket.emit('messageError', { error: 'Invalid star request' });
+      const message = await Message.findById(messageId);
+      if (!message) return socket.emit('messageError', { error: 'Message not found' });
+      if (message.group) {
+        if (!await isGroupMember(message.group, socket.userId)) return socket.emit('messageError', { error: 'You are not a group member' });
+      } else if (String(message.sender) !== socket.userId && String(message.receiver) !== socket.userId) {
+        return socket.emit('messageError', { error: 'Message not found' });
+      }
+      const update = starred ? { $addToSet: { starredBy: socket.userId } } : { $pull: { starredBy: socket.userId } };
+      const updatedMessage = await Message.findByIdAndUpdate(messageId, update, { new: true })
+        .populate('sender', 'name avatar')
+        .populate('receiver', 'name avatar')
+        .populate('group', 'name avatar')
+        .lean();
+      const event = { ...updatedMessage, isStarred: starred };
+      if (message.group) io.to(groupRoom(message.group)).emit('messageStarUpdated', event);
+      else {
+        io.to(message.sender.toString()).emit('messageStarUpdated', event);
+        io.to(message.receiver.toString()).emit('messageStarUpdated', event);
+      }
+    } catch (error) {
+      console.error('❌ Star message error:', error);
+      socket.emit('messageError', { error: 'Failed to update starred message' });
     }
   });
 
@@ -389,17 +520,24 @@ io.on('connection', (socket) => {
       message.edited = true;
       message.editedAt = new Date();
       await message.save();
-      await Conversation.updateOne(
-        { lastMessage: message._id },
-        { $set: { lastMessageText: getMessagePreview(message) } }
-      );
+      if (message.group) {
+        await Group.updateOne({ _id: message.group, lastMessage: message._id }, { $set: { lastMessageText: getMessagePreview(message) } });
+      } else {
+        await Conversation.updateOne(
+          { lastMessage: message._id },
+          { $set: { lastMessageText: getMessagePreview(message) } }
+        );
+      }
 
       const updatedMessage = await Message.findById(messageId)
         .populate('sender', 'name avatar')
         .populate('receiver', 'name avatar')
         .lean();
-      io.to(message.sender.toString()).emit('messageUpdated', updatedMessage);
-      io.to(message.receiver.toString()).emit('messageUpdated', updatedMessage);
+      if (message.group) io.to(groupRoom(message.group)).emit('messageUpdated', updatedMessage);
+      else {
+        io.to(message.sender.toString()).emit('messageUpdated', updatedMessage);
+        io.to(message.receiver.toString()).emit('messageUpdated', updatedMessage);
+      }
     } catch (error) {
       console.error('❌ Edit message error:', error);
       socket.emit('messageError', { error: 'Failed to edit message' });
@@ -427,10 +565,14 @@ io.on('connection', (socket) => {
       message.image = '';
       message.video = '';
       await message.save();
-      await Conversation.updateOne(
-        { lastMessage: message._id },
-        { $set: { lastMessageText: getMessagePreview(message) } }
-      );
+      if (message.group) {
+        await Group.updateOne({ _id: message.group, lastMessage: message._id }, { $set: { lastMessageText: getMessagePreview(message) } });
+      } else {
+        await Conversation.updateOne(
+          { lastMessage: message._id },
+          { $set: { lastMessageText: getMessagePreview(message) } }
+        );
+      }
 
       console.log('✅ Message marked as deleted');
 
@@ -447,8 +589,11 @@ io.on('connection', (socket) => {
           : updatedMessage.reactions || {}
       };
 
-      io.to(message.sender.toString()).emit('messageDeleted', messageToSend);
-      io.to(message.receiver.toString()).emit('messageDeleted', messageToSend);
+      if (message.group) io.to(groupRoom(message.group)).emit('messageDeleted', messageToSend);
+      else {
+        io.to(message.sender.toString()).emit('messageDeleted', messageToSend);
+        io.to(message.receiver.toString()).emit('messageDeleted', messageToSend);
+      }
       
     } catch (error) {
       console.error('❌ Delete message error:', error);

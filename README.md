@@ -116,14 +116,20 @@ aura-chat/
 ├── backend/
 │   ├── models/
 │   │   ├── Conversation.js
+│   │   ├── Group.js
 │   │   ├── Message.js
+│   │   ├── Notification.js
+│   │   ├── Report.js
 │   │   ├── PushSubscription.js
 │   │   └── User.js
 │   ├── routes/
 │   │   ├── auth.js
 │   │   ├── conversations.js
+│   │   ├── groups.js
 │   │   ├── messages.js
+│   │   ├── notifications.js
 │   │   ├── push.js
+│   │   ├── safety.js
 │   │   └── users.js
 │   ├── services/
 │   │   └── pushSender.js
