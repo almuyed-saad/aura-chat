@@ -5,10 +5,8 @@ import { SocketProvider } from './context/SocketContext'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import ChatPage from './pages/ChatPage'
-import { useNotifications } from './hooks/useNotifications'
 
 function App() {
-  const { enableNotifications } = useNotifications()
   return (
     <ThemeProvider>
       <SocketProvider>   {/* ✅ SocketProvider MUST wrap the Router */}

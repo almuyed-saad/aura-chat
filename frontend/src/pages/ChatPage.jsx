@@ -62,6 +62,7 @@ const ChatPage = () => {
   const { socket, onlineUsers, typingUsers, isConnected, unreadCounts, clearUnreadCount } = useSocket()
   const messagesEndRef = useRef(null)
   const typingTimeoutRef = useRef(null)
+  const previousMessageCountRef = useRef(0)
   const { enableNotifications } = useNotifications()
   const [showProfile, setShowProfile] = useState(false)
 
@@ -89,7 +90,9 @@ const ChatPage = () => {
 
   // ✅ Track unread messages when scrolled up
   useEffect(() => {
-    if (!messages.length) return
+    const previousMessageCount = previousMessageCountRef.current
+    previousMessageCountRef.current = messages.length
+    if (!messages.length || messages.length <= previousMessageCount) return
 
     const container = scrollContainerRef.current
     if (!container) return
@@ -204,6 +207,7 @@ const ChatPage = () => {
         const normalized = response.data.map(msg => ({
           ...msg,
           sender: normalizeSender(msg.sender),
+          receiver: normalizeSender(msg.receiver),
           reactions: normalizeReactions(msg.reactions),
           deleted: msg.deleted || false,
           deletedBy: msg.deletedBy || null,
@@ -232,6 +236,7 @@ const ChatPage = () => {
       const normalized = {
         ...message,
         sender: normalizeSender(message.sender),
+        receiver: normalizeSender(message.receiver),
         reactions: normalizeReactions(message.reactions),
         deleted: message.deleted || false,
         deletedBy: message.deletedBy || null,
@@ -257,11 +262,46 @@ const ChatPage = () => {
       }
     }
 
+    const handleMessageAcknowledged = ({ clientMessageId, message } = {}) => {
+      if (!message) return
+      const normalized = {
+        ...message,
+        clientMessageId: message.clientMessageId || clientMessageId,
+        sender: normalizeSender(message.sender),
+        reactions: normalizeReactions(message.reactions),
+        deleted: message.deleted || false,
+        deletedBy: message.deletedBy || null,
+        replyTo: message.replyTo || null,
+        replyToText: message.replyToText || '',
+        replyToSender: message.replyToSender || null,
+        status: message.status || 'sent',
+        read: message.read || false,
+        readAt: message.readAt || null,
+        deliveredAt: message.deliveredAt || null
+      }
+
+      setMessages(prev => {
+        const index = prev.findIndex(item => item.clientMessageId === clientMessageId || item._id === clientMessageId)
+        if (index === -1) return [...prev, normalized]
+        const next = [...prev]
+        next[index] = normalized
+        return next
+      })
+    }
+
+    const handleMessageError = ({ clientMessageId, error } = {}) => {
+      if (clientMessageId) {
+        setMessages(prev => prev.filter(item => item.clientMessageId !== clientMessageId))
+      }
+      toast.error(error || 'Failed to send message')
+    }
+
     const handleReactionUpdated = (updatedMessage) => {
       setMessages(prev => prev.map(msg =>
         msg._id === updatedMessage._id ? {
           ...updatedMessage,
           sender: normalizeSender(updatedMessage.sender),
+          receiver: normalizeSender(updatedMessage.receiver),
           reactions: normalizeReactions(updatedMessage.reactions),
           deleted: updatedMessage.deleted || false,
           deletedBy: updatedMessage.deletedBy || null,
@@ -281,6 +321,7 @@ const ChatPage = () => {
         msg._id === updatedMessage._id ? {
           ...updatedMessage,
           sender: normalizeSender(updatedMessage.sender),
+          receiver: normalizeSender(updatedMessage.receiver),
           reactions: normalizeReactions(updatedMessage.reactions),
           deleted: updatedMessage.deleted || true,
           deletedBy: updatedMessage.deletedBy || null,
@@ -316,6 +357,8 @@ const ChatPage = () => {
     }
 
     socket.on('receiveMessage', handleReceiveMessage)
+    socket.on('messageAcknowledged', handleMessageAcknowledged)
+    socket.on('messageError', handleMessageError)
     socket.on('reactionUpdated', handleReactionUpdated)
     socket.on('messageDeleted', handleMessageDeleted)
     socket.on('messagesDelivered', handleMessagesDelivered)
@@ -323,6 +366,8 @@ const ChatPage = () => {
 
     return () => {
       socket.off('receiveMessage', handleReceiveMessage)
+      socket.off('messageAcknowledged', handleMessageAcknowledged)
+      socket.off('messageError', handleMessageError)
       socket.off('reactionUpdated', handleReactionUpdated)
       socket.off('messageDeleted', handleMessageDeleted)
       socket.off('messagesDelivered', handleMessagesDelivered)
@@ -435,7 +480,12 @@ const ChatPage = () => {
     }
     socket.emit('typing', { receiverId: selectedUser._id, isTyping: false })
 
+    const clientMessageId = typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
     const messageData = {
+      clientMessageId,
       receiverId: selectedUser._id,
       text: newMessage,
       image: uploadedImage?.url || '',
@@ -446,7 +496,8 @@ const ChatPage = () => {
     }
 
     const tempMessage = {
-      _id: Date.now().toString(),
+      _id: clientMessageId,
+      clientMessageId,
       sender: user._id,
       receiver: selectedUser._id,
       text: newMessage,
@@ -733,7 +784,8 @@ const ChatPage = () => {
                     const replySenderName = msg.replyToSender?.name || 'Someone'
 
                     return (
-                      <div key={index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
+                                              <div key={msg._id || msg.clientMessageId || index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
+
                         <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl ${
                           isMyMessage
                             ? `bg-gradient-to-r ${theme.button} text-white`

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const User = require('../models/User');
+const mongoose = require('mongoose');
 
 // ===== GET ALL USERS (except current user) =====
 router.get('/', auth, async (req, res) => {
@@ -18,16 +19,17 @@ router.get('/', auth, async (req, res) => {
 // ===== SEARCH USERS =====
 router.get('/search', auth, async (req, res) => {
   try {
-    const { q } = req.query;
+    const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
     if (!q) {
       return res.status(400).json({ message: 'Search query required' });
     }
 
+    const escapedQuery = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const users = await User.find({
       _id: { $ne: req.user.id },
       $or: [
-        { name: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } },
+        { name: { $regex: escapedQuery, $options: 'i' } },
+        { email: { $regex: escapedQuery, $options: 'i' } },
       ]
     }).select('-password').limit(10);
 
@@ -40,6 +42,9 @@ router.get('/search', auth, async (req, res) => {
 // ===== GET USER BY ID =====
 router.get('/:id', auth, async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
     const user = await User.findById(req.params.id).select('-password');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });

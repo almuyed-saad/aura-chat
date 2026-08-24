@@ -1,8 +1,3 @@
-// ===== DNS FIX FOR MONGODB ATLAS =====
-const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']);
-// =====================================
-
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -13,25 +8,28 @@ require('dotenv').config();
 
 const { sendPushToUser } = require('./services/pushSender');
 const User = require('./models/User');
+const Message = require('./models/Message');
+const { isValidObjectId, validateMessagePayload } = require('./utils/validation');
 
 // ===== INITIALIZE APP =====
 const app = express();
 const server = http.createServer(app);
 
 // ===== SOCKET.IO SETUP =====
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || [
+  'http://localhost:5173',
+  'https://aura-chat-topaz.vercel.app'
+].join(',')).split(',').map(origin => origin.trim()).filter(Boolean);
+
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "https://aura-chat-topaz.vercel.app"],
-    methods: ["GET", "POST"],
+    origin: allowedOrigins,
+    methods: ['GET', 'POST'],
     credentials: true
   }
 });
 
 // ===== MIDDLEWARE =====
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://aura-chat-topaz.vercel.app'
-];
 
 app.use(cors({
   origin: function (origin, callback) {
@@ -45,33 +43,66 @@ app.use(cors({
   },
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
-// ===== TEST ROUTE =====
+// ===== HEALTH ROUTES =====
+let dbReady = false;
+
+app.get('/health/live', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+app.get('/health/ready', (req, res) => {
+  if (!dbReady) {
+    return res.status(503).json({ status: 'not_ready', database: 'disconnected' });
+  }
+  return res.status(200).json({ status: 'ready', database: 'connected' });
+});
+
 app.get('/', (req, res) => {
-  res.send('🚀 Chat API is running!');
+  res.status(dbReady ? 200 : 503).json({
+    status: dbReady ? 'ok' : 'starting',
+    message: dbReady ? 'Chat API is running!' : 'Chat API is starting'
+  });
 });
 
 // ===== API ROUTES =====
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/messages', require('./routes/messages'));
-app.use('/api/upload', require('./routes/upload'));
 app.use('/api/push', require('./routes/push'));
+
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+app.use((error, req, res, next) => {
+  if (error?.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request payload is too large' });
+  }
+  console.error('Unhandled request error:', error?.message || error);
+  return res.status(500).json({ error: 'Internal server error' });
+});
 
 // ===== MONGODB CONNECTION =====
 const connectDB = async () => {
   try {
+    if (!process.env.MONGO_URI) {
+      throw new Error('MONGO_URI is not configured');
+    }
+
     await mongoose.connect(process.env.MONGO_URI, {
       dbName: 'chat-app',
       serverSelectionTimeoutMS: 30000,
       socketTimeoutMS: 45000,
       connectTimeoutMS: 30000,
     });
+    dbReady = true;
     console.log('✅ Connected to MongoDB');
     await User.updateMany({}, { online: false });
     console.log('🧹 Reset all users to offline on server start');
   } catch (err) {
+    dbReady = false;
     console.error('❌ MongoDB connection error:', err.message);
     console.log('🔄 Retrying in 5 seconds...');
     setTimeout(connectDB, 5000);
@@ -80,31 +111,42 @@ const connectDB = async () => {
 
 connectDB();
 
-// ===== MODELS =====
-// ===== MODELS =====
-const Message = require('./models/Message');
-
 // ===== SOCKET STORE =====
+// A user may be connected from several tabs or devices at once.
 const userSocketMap = new Map();
+
+const addUserSocket = (userId, socketId) => {
+  const sockets = userSocketMap.get(userId) || new Set();
+  sockets.add(socketId);
+  userSocketMap.set(userId, sockets);
+};
+
+const removeUserSocket = (userId, socketId) => {
+  const sockets = userSocketMap.get(userId);
+  if (!sockets) return false;
+  sockets.delete(socketId);
+  if (sockets.size === 0) userSocketMap.delete(userId);
+  return sockets.size > 0;
+};
+
+const isUserOnline = (userId) => userSocketMap.has(String(userId));
 
 // ===== SOCKET.IO AUTHENTICATION MIDDLEWARE =====
 io.use((socket, next) => {
-  const token = socket.handshake.auth.token;
-  console.log('🔑 Auth token received:', token ? 'Yes' : 'No');
-  
-  if (!token) {
-    console.log('❌ No token provided');
-    return next(new Error('Authentication error: No token'));
-  }
-  
+  if (!dbReady) return next(new Error('Service not ready'));
+
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(new Error('Authentication error'));
+
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.id;
-    console.log('✅ Authenticated user:', socket.userId);
+    if (!decoded.id || !isValidObjectId(decoded.id)) {
+      return next(new Error('Authentication error'));
+    }
+    socket.userId = String(decoded.id);
     next();
   } catch (err) {
-    console.error('❌ Invalid token:', err.message);
-    next(new Error('Invalid token'));
+    next(new Error('Authentication error'));
   }
 });
 
@@ -112,59 +154,75 @@ io.use((socket, next) => {
 io.on('connection', (socket) => {
   console.log('🟢 User connected:', socket.userId);
 
-  // ✅ Store socket reference
-  userSocketMap.set(socket.userId, socket.id);
-  console.log('📌 Socket stored for user:', socket.userId, 'Socket ID:', socket.id);
-
-  // ✅ Auto-join room immediately
+  addUserSocket(socket.userId, socket.id);
   socket.join(socket.userId);
-  console.log('📌 Auto-joined room:', socket.userId);
 
   // ===== JOIN ROOM (for reconnects) =====
-  socket.on('joinRoom', (userId) => {
-    socket.join(userId);
-    userSocketMap.set(userId, socket.id);
-    console.log('📌 User joined room:', userId);
+  // The payload is intentionally ignored. Socket identity comes from the JWT.
+  socket.on('joinRoom', () => {
+    socket.join(socket.userId);
   });
 
+  const messageRateWindow = { startedAt: Date.now(), count: 0 };
+  const canSendMessage = () => {
+    const now = Date.now();
+    if (now - messageRateWindow.startedAt >= 60 * 1000) {
+      messageRateWindow.startedAt = now;
+      messageRateWindow.count = 0;
+    }
+    messageRateWindow.count += 1;
+    return messageRateWindow.count <= 60;
+  };
+
   // ===== SEND MESSAGE =====
-  socket.on('sendMessage', async (data) => {
-    console.log('📨 Message from:', socket.userId, 'to:', data.receiverId);
-    
+  socket.on('sendMessage', async (data = {}) => {
     try {
-      const { 
-        receiverId, 
-        text, 
-        image, 
-        imagePublicId, 
-        video, 
-        videoPublicId,
-        replyTo,
-        replyToText,
-        replyToSender
-      } = data;
-      
-      // ✅ Check if receiver is online
-      const receiverOnline = userSocketMap.has(receiverId);
-      
-      const message = new Message({
-        sender: socket.userId,
-        receiver: receiverId,
-        text: text || '',
-        image: image || '',
-        imagePublicId: imagePublicId || '',
-        video: video || '',
-        videoPublicId: videoPublicId || '',
-        replyTo: replyTo || null,
-        replyToText: replyToText || '',
-        replyToSender: replyToSender || null,
-        status: receiverOnline ? 'delivered' : 'sent',
-        deliveredAt: receiverOnline ? new Date() : null,
-        read: false
-      });
-      
-      await message.save();
-      console.log('✅ Message saved! ID:', message._id, 'Status:', message.status);
+      if (!canSendMessage()) {
+        return socket.emit('messageError', {
+          clientMessageId: data.clientMessageId || null,
+          error: 'Too many messages. Please slow down.'
+        });
+      }
+
+      const validation = validateMessagePayload(data);
+      if (!validation.valid) {
+        return socket.emit('messageError', { clientMessageId: data.clientMessageId || null, error: validation.message });
+      }
+
+      const { receiverId, text, image, video, replyTo } = validation.value;
+      const clientMessageId = typeof data.clientMessageId === 'string'
+        ? data.clientMessageId.trim().slice(0, 100)
+        : '';
+
+      const receiver = await User.findById(receiverId).select('_id');
+      if (!receiver) {
+        return socket.emit('messageError', { clientMessageId: clientMessageId || null, error: 'Recipient not found' });
+      }
+
+      let message = clientMessageId
+        ? await Message.findOne({ sender: socket.userId, clientMessageId })
+        : null;
+
+      if (!message) {
+        const receiverOnline = isUserOnline(receiverId);
+        message = new Message({
+          sender: socket.userId,
+          receiver: receiverId,
+          clientMessageId: clientMessageId || undefined,
+          text,
+          image,
+          imagePublicId: typeof data.imagePublicId === 'string' ? data.imagePublicId.slice(0, 255) : '',
+          video,
+          videoPublicId: typeof data.videoPublicId === 'string' ? data.videoPublicId.slice(0, 255) : '',
+          replyTo,
+          replyToText: typeof data.replyToText === 'string' ? data.replyToText.trim().slice(0, 500) : '',
+          replyToSender: isValidObjectId(data.replyToSender) ? data.replyToSender : null,
+          status: receiverOnline ? 'delivered' : 'sent',
+          deliveredAt: receiverOnline ? new Date() : null,
+          read: false
+        });
+        await message.save();
+      }
 
       const populatedMessage = await Message.findById(message._id)
         .populate('sender', 'name avatar')
@@ -173,17 +231,16 @@ io.on('connection', (socket) => {
 
       const messageToSend = {
         ...populatedMessage,
-        reactions: populatedMessage.reactions instanceof Map 
-          ? Object.fromEntries(populatedMessage.reactions) 
+        reactions: populatedMessage.reactions instanceof Map
+          ? Object.fromEntries(populatedMessage.reactions)
           : populatedMessage.reactions || {}
       };
 
-      // ✅ Send to receiver
       io.to(receiverId).emit('receiveMessage', messageToSend);
-      io.to(socket.id).emit('receiveMessage', messageToSend);
-      
-      // ✅ Send push notification if receiver is offline
-      if (!userSocketMap.has(receiverId)) {
+      io.to(socket.userId).except(socket.id).emit('receiveMessage', messageToSend);
+      socket.emit('messageAcknowledged', { clientMessageId, message: messageToSend });
+
+      if (!isUserOnline(receiverId)) {
         const senderUser = await User.findById(socket.userId).select('name');
         sendPushToUser(receiverId, {
           title: senderUser?.name || 'New message',
@@ -192,56 +249,46 @@ io.on('connection', (socket) => {
           url: '/'
         }).catch(err => console.error('❌ Push trigger failed:', err));
       }
-      
-      console.log('📤 Message emitted to receiver:', receiverId);
 
-      // ✅ Count unread messages from THIS sender only
       const unreadCount = await Message.countDocuments({
         receiver: receiverId,
         sender: socket.userId,
         read: false
       });
-      
-      io.to(receiverId).emit('unreadCount', { 
-        senderId: socket.userId, 
-        count: unreadCount 
-      });
-      console.log('🔴 Unread count emitted:', unreadCount);
-
+      io.to(receiverId).emit('unreadCount', { senderId: socket.userId, count: unreadCount });
     } catch (error) {
       console.error('❌ Message error:', error);
-      socket.emit('messageError', { error: 'Failed to send message' });
+      socket.emit('messageError', {
+        clientMessageId: data.clientMessageId || null,
+        error: 'Failed to send message'
+      });
     }
   });
 
   // ===== TYPING INDICATOR =====
-  socket.on('typing', (data) => {
-    console.log('⌨️ Typing from:', socket.userId, 'isTyping:', data.isTyping);
-    socket.broadcast.emit('typing', { 
-      userId: socket.userId, 
-      isTyping: data.isTyping 
-    });
-  });
+  const emitTyping = (data = {}, isTyping) => {
+    const receiverId = String(data.receiverId || '');
+    if (!isValidObjectId(receiverId) || receiverId === socket.userId) return;
+    io.to(receiverId).emit('typing', { userId: socket.userId, isTyping });
+  };
 
-  // ===== STOP TYPING =====
-  socket.on('stopTyping', (data) => {
-    socket.broadcast.emit('typing', {
-      userId: socket.userId,
-      isTyping: false
-    });
-  });
+  socket.on('typing', (data) => emitTyping(data, Boolean(data?.isTyping)));
+  socket.on('stopTyping', (data) => emitTyping(data, false));
 
   // ===== REACTION =====
-  socket.on('addReaction', async (data) => {
-    console.log('👍 Reaction from:', socket.userId, 'on message:', data.messageId);
-    
+  socket.on('addReaction', async (data = {}) => {
     try {
       const { messageId, emoji } = data;
-      
-      const message = await Message.findById(messageId);
+      if (!isValidObjectId(messageId) || (emoji !== null && (typeof emoji !== 'string' || emoji.length > 32))) {
+        return socket.emit('reactionError', { error: 'Invalid reaction payload' });
+      }
+
+      const message = await Message.findOne({
+        _id: messageId,
+        $or: [{ sender: socket.userId }, { receiver: socket.userId }]
+      });
       if (!message) {
-        console.log('❌ Message not found');
-        return;
+        return socket.emit('reactionError', { error: 'Message not found' });
       }
 
       if (emoji === null) {
@@ -268,19 +315,6 @@ io.on('connection', (socket) => {
       
       const senderId = message.sender.toString();
       const receiverId = message.receiver.toString();
-      const senderSocketId = userSocketMap.get(senderId);
-      const receiverSocketId = userSocketMap.get(receiverId);
-      
-      if (senderSocketId) {
-        io.to(senderSocketId).emit('reactionUpdated', messageToSend);
-        console.log('✅ Emitted to sender via socket ID');
-      }
-      
-      if (receiverSocketId) {
-        io.to(receiverSocketId).emit('reactionUpdated', messageToSend);
-        console.log('✅ Emitted to receiver via socket ID');
-      }
-      
       io.to(senderId).emit('reactionUpdated', messageToSend);
       io.to(receiverId).emit('reactionUpdated', messageToSend);
       
@@ -290,20 +324,16 @@ io.on('connection', (socket) => {
   });
 
   // ===== DELETE MESSAGE =====
-  socket.on('deleteMessage', async (data) => {
-    console.log('🗑️ Delete message request from:', socket.userId, 'message:', data.messageId);
-    
+  socket.on('deleteMessage', async (data = {}) => {
     try {
       const { messageId } = data;
-      
-      const message = await Message.findById(messageId);
-      if (!message) {
-        console.log('❌ Message not found');
-        return;
+      if (!isValidObjectId(messageId)) {
+        return socket.emit('messageError', { error: 'Invalid message ID' });
       }
 
-      if (message.sender.toString() !== socket.userId) {
-        console.log('❌ User not authorized to delete this message');
+      const message = await Message.findOne({ _id: messageId, sender: socket.userId });
+      if (!message) {
+        console.log('❌ Message not found');
         return;
       }
 
@@ -312,6 +342,7 @@ io.on('connection', (socket) => {
       message.deletedAt = new Date();
       message.text = '';
       message.image = '';
+      message.video = '';
       await message.save();
       
       console.log('✅ Message marked as deleted');
@@ -338,10 +369,10 @@ io.on('connection', (socket) => {
   });
 
   // ===== MARK AS READ =====
-  socket.on('markAsRead', async ({ senderId }) => {
+  socket.on('markAsRead', async ({ senderId } = {}) => {
     try {
-      console.log('📖 markAsRead from:', socket.userId, 'for sender:', senderId);
-      
+      if (!isValidObjectId(senderId) || senderId === socket.userId) return;
+
       const unreadMessages = await Message.find({
         sender: senderId,
         receiver: socket.userId,
@@ -427,22 +458,19 @@ io.on('connection', (socket) => {
   // ===== DISCONNECT =====
   socket.on('disconnect', async () => {
     console.log('🔴 User disconnected:', socket.userId);
-    
-    userSocketMap.delete(socket.userId);
-    console.log('🗑️ Removed socket from map');
-    
+
     try {
-      await User.findByIdAndUpdate(socket.userId, { 
-        online: false, 
-        lastSeen: Date.now() 
-      });
-      
+      const stillOnline = removeUserSocket(socket.userId, socket.id);
+
+      if (!stillOnline) {
+        await User.findByIdAndUpdate(socket.userId, {
+          online: false,
+          lastSeen: Date.now()
+        });
+      }
+
       const onlineUsers = await User.find({ online: true }).select('_id name');
-      
-      // ✅ FIX: Broadcast to ALL users (not just the one who disconnected)
       io.emit('getOnlineUsers', onlineUsers);
-      console.log('📡 Updated online users after disconnect');
-      
     } catch (error) {
       console.error('❌ Disconnect error:', error);
     }

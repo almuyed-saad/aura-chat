@@ -2,14 +2,18 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const Message = require('../models/Message');
+const { isValidObjectId } = require('../utils/validation');
 
 // Get messages between two users
 router.get('/:userId', auth, async (req, res) => {
   try {
     const { userId } = req.params;
     const currentUserId = req.user.id || req.user._id;
-    
-    // ✅ Mark messages as read when user opens chat
+    if (!isValidObjectId(userId) || String(userId) === String(currentUserId)) {
+      return res.status(400).json({ error: 'Invalid conversation user' });
+    }
+
+    // Mark messages as read when user opens chat
     await Message.updateMany(
       {
         sender: userId,
@@ -18,6 +22,7 @@ router.get('/:userId', auth, async (req, res) => {
       },
       {
         read: true,
+        status: 'read',
         readAt: new Date()
       }
     );
@@ -58,7 +63,7 @@ router.get('/:userId', auth, async (req, res) => {
 router.get('/unread/count', auth, async (req, res) => {
   try {
     const currentUserId = req.user.id || req.user._id;
-    
+
     const unreadCounts = await Message.aggregate([
       {
         $match: {

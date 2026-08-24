@@ -2,11 +2,17 @@ const webpush = require('web-push');
 const PushSubscription = require('../models/PushSubscription');
 
 // ===== VAPID SETUP =====
-webpush.setVapidDetails(
-  'mailto:you@example.com',
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+const pushEnabled = Boolean(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
+
+if (pushEnabled) {
+  webpush.setVapidDetails(
+    process.env.VAPID_SUBJECT || 'mailto:admin@example.com',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn('⚠️ Push notifications disabled: VAPID keys are not configured');
+}
 
 /**
  * Sends a push notification to every device the given user has
@@ -16,6 +22,8 @@ webpush.setVapidDetails(
  * subscription was created under an old/mismatched VAPID key).
  */
 async function sendPushToUser(userId, { title, body, senderId, url }) {
+  if (!pushEnabled) return;
+
   const subscriptions = await PushSubscription.find({ user: userId });
   if (subscriptions.length === 0) {
     console.log('ℹ️ No push subscriptions found for user:', userId);
