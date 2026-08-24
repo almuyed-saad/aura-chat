@@ -905,7 +905,7 @@ const ChatPage = () => {
                   className="fixed left-0 top-0 bottom-0 w-[280px] z-50 lg:hidden"
                 >
                   <div className={`h-full ${theme.card} backdrop-blur-xl border-r ${isDark ? 'border-white/20' : theme.border} p-4 overflow-y-auto`}>
-                    <div className="flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}">
+                    <div className={`flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}`}>
                       <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
                       <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
                       <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
@@ -919,9 +919,9 @@ const ChatPage = () => {
                         onChange={(event) => setConversationSearch(event.target.value)}
                         placeholder="Search chats..."
                         aria-label="Search chats"
-                        className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                        className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white placeholder:text-gray-400' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-500'}`}
                       />
-                      <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'}`}>
+                      <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white' : 'bg-white border-slate-300 text-slate-900'}`}>
                         <option value="active">Active chats</option>
                         <option value="all">All chats</option>
                         <option value="archived">Archived chats</option>
@@ -1012,7 +1012,7 @@ const ChatPage = () => {
 
           {/* Desktop Sidebar */}
           <div className={`hidden lg:block lg:col-span-1 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-4 transition-colors duration-500 max-h-[70vh] overflow-y-auto`}>
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}">
+            <div className={`flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}`}>
               <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
                               <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
               <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
@@ -1027,9 +1027,9 @@ const ChatPage = () => {
                 onChange={(event) => setConversationSearch(event.target.value)}
                 placeholder="Search chats..."
                 aria-label="Search chats"
-                className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white placeholder:text-gray-400' : 'bg-white border-slate-300 text-slate-900 placeholder:text-slate-500'}`}
               />
-              <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'}`}>
+              <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500 ${isDark ? 'bg-[#111] border-white/20 text-white' : 'bg-white border-slate-300 text-slate-900'}`}>
                 <option value="active">Active chats</option>
                 <option value="all">All chats</option>
                 <option value="archived">Archived chats</option>
@@ -1326,7 +1326,7 @@ const ChatPage = () => {
                         value={newMessage}
                         onChange={handleTyping}
                         placeholder={replyToMessage ? "Write a reply..." : uploadedAttachment ? "Add caption..." : "Type a message..."}
-                        className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base border ${isDark ? 'border-white/20' : theme.border} ${isDark ? 'bg-[#1a1a1a]' : 'bg-light-surface'} ${theme.text} focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all font-input placeholder:${theme.textSecondary} min-h-[44px]`}
+                        className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base border focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all font-input min-h-[44px] ${isDark ? 'border-white/20 bg-[#1a1a1a] text-white placeholder:text-gray-400' : 'border-slate-300 bg-white text-slate-900 placeholder:text-slate-500'}`}
                       />
                       <MediaUpload
                         onMediaUpload={handleMediaUpload}
