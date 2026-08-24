@@ -79,6 +79,7 @@ app.use('/api/conversations', conversationRouter);
 app.use('/api/groups', require('./routes/groups').router);
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/safety', require('./routes/safety'));
+app.use('/api/ai', require('./routes/ai'));
 app.use('/api/push', require('./routes/push'));
 
 app.use((req, res) => {

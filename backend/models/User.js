@@ -8,7 +8,9 @@ const UserSchema = new mongoose.Schema({
   avatar: { type: String, default: '' },
   online: { type: Boolean, default: false },
   lastSeen: { type: Date, default: Date.now },
-  blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  aiEnabled: { type: Boolean, default: false },
+  aiConsentAt: { type: Date, default: null }
 }, { timestamps: true });
 
 // ✅ Hash the password before saving, but only if it changed
