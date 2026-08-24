@@ -265,6 +265,10 @@ npm run dev
 | `VAPID_PRIVATE_KEY` | VAPID private key for push notifications |
 | `VAPID_SUBJECT` | Contact URI used for push notification identification |
 | `ALLOWED_ORIGINS` | Comma-separated frontend origins allowed by API and Socket.io |
+| `AI_ENABLED` | Set to `true` to enable optional AI endpoints; defaults to disabled |
+| `AI_API_URL` | OpenAI-compatible chat-completions endpoint |
+| `AI_API_KEY` | Server-only provider key; never expose it to the frontend |
+| `AI_MODEL` | Configurable provider model name |
 
 **Frontend (`frontend/.env`)**
 
@@ -283,6 +287,12 @@ npm run dev
 Aura supports images up to 10 MB, videos up to 25 MB, audio and voice notes up to 10 MB, and common documents up to 10 MB. Voice notes are recorded in the browser for a maximum of two minutes. Rich attachments are validated on both the client and server and are stored with their public URL, resource type, MIME type, filename, size, duration, and dimensions where available.
 
 The unsigned Cloudinary upload preset must explicitly allow the image, video, and raw resource types required by the deployment. The public cloud name, preset name, and VAPID public key are client-visible configuration; no Cloudinary API secret is included in the frontend.
+
+## AI assistance
+
+AI features are disabled unless both `AI_ENABLED=true` and a server-side `AI_API_KEY` are configured. Even when the server is enabled, each user must explicitly opt in through the AI assistant panel. Aura sends only bounded text context to the provider, does not send attachments, does not log prompt content, and keeps normal chat delivery independent of AI availability. Users can use smart replies, two-sentence conversation summaries, tone rewriting, and translation after consent.
+
+AI requests are authenticated, rate-limited, time-bounded, and return generic provider errors to clients. The provider endpoint and model are configurable so a compatible service can be used without changing frontend code.
 
 ## Testing
 

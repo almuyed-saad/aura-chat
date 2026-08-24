@@ -21,6 +21,7 @@ import NotificationCenter from '../components/NotificationCenter'
 import SafetyActions from '../components/SafetyActions'
 import GroupSettingsModal from '../components/GroupSettingsModal'
 import ThreadPanel from '../components/ThreadPanel'
+import AIAssist from '../components/AIAssist'
 import Avatar from '../components/Avatar'
 
 const formatFileSize = (bytes = 0) => {
@@ -1242,6 +1243,7 @@ const ChatPage = () => {
                     </div>
                   )}
 
+                  <AIAssist messages={messages} draft={newMessage} onDraftChange={setNewMessage} />
                   <form onSubmit={sendMessage} className={`flex gap-1 sm:gap-2 pt-2 sm:pt-3 border-t ${isDark ? 'border-white/20' : theme.border}`}>
                     <div className="flex-1 flex items-center gap-1 sm:gap-2">
                       <input
