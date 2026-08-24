@@ -17,8 +17,13 @@ const LoginPage = () => {
     setLoading(true)
     try {
       const response = await apiClient.post('/api/auth/login', { email, password })
+      const authenticatedUser = {
+        ...response.data.user,
+        id: response.data.user.id || response.data.user._id,
+        _id: response.data.user._id || response.data.user.id
+      }
       localStorage.setItem('token', response.data.token)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
+      localStorage.setItem('user', JSON.stringify(authenticatedUser))
       window.dispatchEvent(new Event('authChanged'))
       toast.success('Welcome back! 🎉')
       navigate('/')
@@ -41,7 +46,7 @@ const LoginPage = () => {
           {/* Logo */}
           <div className="text-center mb-8">
             <h1 className="text-4xl font-logo bg-gradient-to-r from-primary-500 via-purple-500 to-primary-600 bg-clip-text text-transparent">
-              ✦ Chateau
+              ✦ Aura
             </h1>
             <p className="text-light-text-secondary dark:text-dark-text-secondary mt-2 font-light tracking-wide">
               Sign in to continue

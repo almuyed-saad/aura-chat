@@ -11,6 +11,12 @@ const MessageSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  clientMessageId: {
+    type: String,
+    trim: true,
+    maxlength: 100,
+    default: undefined
+  },
   text: {
     type: String,
     default: ''
@@ -78,5 +84,12 @@ const MessageSchema = new mongoose.Schema({
     type: Date
   }
 }, { timestamps: true });
+
+MessageSchema.index({ sender: 1, receiver: 1, createdAt: 1 });
+MessageSchema.index({ receiver: 1, read: 1, sender: 1 });
+MessageSchema.index(
+  { sender: 1, clientMessageId: 1 },
+  { unique: true, sparse: true }
+);
 
 module.exports = mongoose.models.Message || mongoose.model('Message', MessageSchema);

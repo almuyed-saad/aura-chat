@@ -12,16 +12,26 @@ export const SocketProvider = ({ children }) => {
   const [unreadCounts, setUnreadCounts] = useState({})
   const socketRef = useRef(null)
 
-  const fetchUnreadCounts = async (socketInstance) => {
+  const getStoredUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}')
+      return String(user._id || user.id || '')
+    } catch {
+      return ''
+    }
+  }
+
+  const fetchUnreadCounts = async () => {
     try {
       const token = localStorage.getItem('token')
       const response = await fetch(`${API_URL}/api/messages/unread/count`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
-      const data = await response.json()
-      console.log('📊 Initial unread counts:', data)
+            const data = await response.json()
+      if (!response.ok || !Array.isArray(data)) throw new Error('Unable to load unread counts')
       const counts = {}
-      data.forEach(item => { counts[item._id] = item.count })
+      data.forEach(item => { counts[String(item._id)] = item.count })
+
       setUnreadCounts(counts)
     } catch (error) {
       console.error('❌ Error fetching unread counts:', error)
@@ -56,11 +66,10 @@ export const SocketProvider = ({ children }) => {
       instance.on('connect', () => {
         console.log('🟢 Socket connected successfully!')
         setIsConnected(true)
-        const user = JSON.parse(localStorage.getItem('user') || '{}')
-        if (user._id) {
-          instance.emit('joinRoom', user._id)
-          console.log('📌 Joined room:', user._id)
-          fetchUnreadCounts(instance)
+        const userId = getStoredUserId()
+        if (userId) {
+          instance.emit('joinRoom')
+          fetchUnreadCounts()
         }
       })
 
@@ -77,10 +86,10 @@ export const SocketProvider = ({ children }) => {
       instance.on('reconnect', (attempt) => {
         console.log('🔄 Socket reconnected after', attempt, 'attempts')
         setIsConnected(true)
-        const user = JSON.parse(localStorage.getItem('user') || '{}')
-        if (user._id) {
-          instance.emit('joinRoom', user._id)
-          fetchUnreadCounts(instance)
+        const userId = getStoredUserId()
+        if (userId) {
+          instance.emit('joinRoom')
+          fetchUnreadCounts()
         }
       })
 
@@ -116,8 +125,12 @@ export const SocketProvider = ({ children }) => {
     socketInstance = connectSocket()
 
     const handleAuthChange = () => {
-      console.log('🔄 Auth changed, reconnecting socket...')
       if (socketInstance) socketInstance.disconnect()
+      socketRef.current = null
+      setSocket(null)
+      setOnlineUsers([])
+      setTypingUsers([])
+      setUnreadCounts({})
       socketInstance = connectSocket()
     }
 
@@ -126,6 +139,8 @@ export const SocketProvider = ({ children }) => {
     return () => {
       window.removeEventListener('authChanged', handleAuthChange)
       if (socketInstance) socketInstance.disconnect()
+      socketRef.current = null
+      setSocket(null)
     }
   }, [])
 

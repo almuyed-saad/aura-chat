@@ -2,11 +2,32 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const rateLimit = require('../middleware/rateLimit');
+const { validateRegistration, validateLogin } = require('../utils/validation');
+
+const authRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Too many authentication attempts. Please try again later.'
+});
+
+const serializeUser = (user) => ({
+  id: String(user._id),
+  _id: String(user._id),
+  name: user.name,
+  email: user.email,
+  avatar: user.avatar
+});
 
 // ===== REGISTER =====
-router.post('/register', async (req, res) => {
+router.post('/register', authRateLimit, async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const validation = validateRegistration(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ message: validation.message });
+    }
+
+    const { name, email, password } = validation.value;
 
     // Check if user exists
     const existingUser = await User.findOne({ email });
@@ -25,24 +46,28 @@ router.post('/register', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-      }
-    });
+    res.status(201).json({ token, user: serializeUser(user) });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    if (error.code === 11000) {
+      return res.status(409).json({ message: 'An account with this email already exists' });
+    }
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Invalid registration data' });
+    }
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Unable to create account' });
   }
 });
 
 // ===== LOGIN =====
-router.post('/login', async (req, res) => {
+router.post('/login', authRateLimit, async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const validation = validateLogin(req.body);
+    if (!validation.valid) {
+      return res.status(400).json({ message: validation.message });
+    }
+
+    const { email, password } = validation.value;
 
     // Find user
     const user = await User.findOne({ email });
@@ -63,17 +88,10 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        avatar: user.avatar,
-      }
-    });
+    res.json({ token, user: serializeUser(user) });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Unable to sign in' });
   }
 });
 

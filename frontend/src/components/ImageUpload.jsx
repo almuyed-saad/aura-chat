@@ -2,16 +2,7 @@ import React, { useRef, useState } from 'react'
 import { FiImage, FiX } from 'react-icons/fi'
 import toast from 'react-hot-toast'
 import axios from 'axios'
-
-// ✅ Uploads directly to Cloudinary from the browser - Render is no longer
-// involved in this step at all, which is what fixes the 403 (Render's
-// outbound IP was being blocked by Cloudinary; this bypasses that entirely).
-// Only the public cloud name + unsigned preset name are used - no secret
-// key is ever exposed in frontend code, this is Cloudinary's standard
-// supported pattern for direct browser uploads.
-const CLOUDINARY_CLOUD_NAME = 'ssw708f4'
-const CLOUDINARY_UPLOAD_PRESET = 'aura_unsigned'
-const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`
+import { CLOUDINARY_UPLOAD_PRESET, CLOUDINARY_UPLOAD_URL } from '../config'
 
 const ImageUpload = ({ onImageUpload, disabled }) => {
   const [uploading, setUploading] = useState(false)
@@ -31,6 +22,12 @@ const ImageUpload = ({ onImageUpload, disabled }) => {
     // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('Image must be less than 10MB')
+      return
+    }
+
+    if (!CLOUDINARY_UPLOAD_URL || !CLOUDINARY_UPLOAD_PRESET) {
+      toast.error('Image upload is not configured')
+      e.target.value = ''
       return
     }
 

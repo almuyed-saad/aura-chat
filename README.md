@@ -122,7 +122,6 @@ aura-chat/
 │   │   ├── auth.js
 │   │   ├── messages.js
 │   │   ├── push.js
-│   │   ├── upload.js
 │   │   └── users.js
 │   ├── services/
 │   │   └── pushSender.js
@@ -208,6 +207,8 @@ CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
 VAPID_PUBLIC_KEY=your_vapid_public_key
 VAPID_PRIVATE_KEY=your_vapid_private_key
+VAPID_SUBJECT=mailto:you@example.com
+ALLOWED_ORIGINS=https://aura-chat-topaz.vercel.app,http://localhost:5173
 ```
 
 Start the backend server:
@@ -252,18 +253,20 @@ npm run dev
 | `PORT` | Server port (default: `5000`) |
 | `MONGO_URI` | MongoDB Atlas connection string |
 | `JWT_SECRET` | Secret key used to sign JWT tokens |
-| `CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name |
-| `CLOUDINARY_API_KEY` | Cloudinary API key |
-| `CLOUDINARY_API_SECRET` | Cloudinary API secret |
 | `VAPID_PUBLIC_KEY` | VAPID public key for push notifications |
 | `VAPID_PRIVATE_KEY` | VAPID private key for push notifications |
+| `VAPID_SUBJECT` | Contact URI used for push notification identification |
+| `ALLOWED_ORIGINS` | Comma-separated frontend origins allowed by API and Socket.io |
 
 **Frontend (`frontend/.env`)**
 
 | Variable | Description |
 |---|---|
 | `VITE_API_URL` | Base URL of the backend API |
+| `VITE_SOCKET_URL` | Optional Socket.io URL; defaults to `VITE_API_URL` |
 | `VITE_VAPID_PUBLIC_KEY` | VAPID public key for push notifications |
+| `VITE_CLOUDINARY_CLOUD_NAME` | Public Cloudinary cloud name |
+| `VITE_CLOUDINARY_UPLOAD_PRESET` | Restricted unsigned Cloudinary upload preset used for direct browser uploads |
 
 ---
 

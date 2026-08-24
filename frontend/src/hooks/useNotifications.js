@@ -1,7 +1,5 @@
 import { useEffect, useCallback } from 'react'
-import { API_URL } from '../config'
-
-const VAPID_PUBLIC_KEY = 'BGQWfUUj9JMFkTuiswqbjf3iDQKdD88Ppe7YsuYDmPI6IJ_Fm8ilGv01wGrnIFQ9H9EKm6i2zFD7ntBxZhFVj4E'
+import { API_URL, VAPID_PUBLIC_KEY } from '../config'
 
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
@@ -20,7 +18,7 @@ function urlBase64ToUint8Array(base64String) {
 // no fresh user click required for that part.
 async function subscribeAndSave() {
   const token = localStorage.getItem('token')
-  if (!token) {
+  if (!token || !VAPID_PUBLIC_KEY) {
     console.log('🔕 Skipping push subscribe - not logged in')
     return false
   }
@@ -70,7 +68,7 @@ export const useNotifications = () => {
   // is still unset, so a granted-but-unsubscribed user had no path back in.
   useEffect(() => {
     if (!('Notification' in window) || !('serviceWorker' in navigator)) return
-    if (Notification.permission === 'granted') {
+    if (Notification.permission === 'granted' && VAPID_PUBLIC_KEY) {
       subscribeAndSave()
     }
   }, [])
@@ -78,6 +76,10 @@ export const useNotifications = () => {
   const enableNotifications = useCallback(async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       console.warn('Push notifications not supported in this browser')
+      return false
+    }
+    if (!VAPID_PUBLIC_KEY) {
+      console.warn('Push notifications are not configured')
       return false
     }
 
