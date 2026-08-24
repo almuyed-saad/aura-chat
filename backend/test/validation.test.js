@@ -33,6 +33,22 @@ test('normalizes valid login data', () => {
   assert.equal(result.value.email, 'user@example.com');
 });
 
+test('accepts a group message with bounded mentions and thread root', () => {
+  const result = validateMessagePayload({
+    groupId: validReceiverId,
+    text: 'Hello @Aura',
+    mentions: [validReceiverId],
+    threadRoot: validReceiverId
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.value.groupId, validReceiverId);
+  assert.deepEqual(result.value.mentions, [validReceiverId]);
+});
+
+test('rejects a payload that targets both a user and a group', () => {
+  assert.equal(validateMessagePayload({ receiverId: validReceiverId, groupId: validReceiverId, text: 'Hello' }).valid, false);
+});
+
 test('rejects an invalid recipient', () => {
   const result = validateMessagePayload({ receiverId: 'not-an-id', text: 'Hello' });
   assert.equal(result.valid, false);

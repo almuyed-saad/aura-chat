@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX, FiStar, FiVolumeX, FiArchive } from 'react-icons/fi'
+import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX, FiStar, FiVolumeX, FiArchive, FiBell } from 'react-icons/fi'
 import ThemeToggle from '../components/ThemeToggle'
 import MediaUpload from '../components/MediaUpload'
 import VoiceRecorder from '../components/VoiceRecorder'
@@ -16,6 +16,11 @@ import toast from 'react-hot-toast'
 import { useNotifications } from '../hooks/useNotifications'
 import NotificationBanner from '../components/NotificationBanner'
 import ProfileModal from '../components/ProfileModal'
+import GroupCreateModal from '../components/GroupCreateModal'
+import NotificationCenter from '../components/NotificationCenter'
+import SafetyActions from '../components/SafetyActions'
+import GroupSettingsModal from '../components/GroupSettingsModal'
+import ThreadPanel from '../components/ThreadPanel'
 import Avatar from '../components/Avatar'
 
 const formatFileSize = (bytes = 0) => {
@@ -56,14 +61,29 @@ const normalizeUser = (userData) => {
   }
 }
 
+const extractMentionIds = (text, group) => {
+  if (!group || !Array.isArray(group.members)) return []
+  const lowerText = text.toLowerCase()
+  return group.members
+    .filter(member => member.user && lowerText.includes(`@${member.user.name.toLowerCase().replace(/\s+/g, '')}`))
+    .map(member => member.user._id)
+}
+
 const ChatPage = () => {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [users, setUsers] = useState([])
+  const [groups, setGroups] = useState([])
+  const [showGroupCreator, setShowGroupCreator] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showGroupSettings, setShowGroupSettings] = useState(false)
+  const [threadRoot, setThreadRoot] = useState(null)
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0)
   const [conversationSummaries, setConversationSummaries] = useState([])
   const [conversationSearch, setConversationSearch] = useState('')
   const [conversationFilter, setConversationFilter] = useState('active')
   const [selectedUser, setSelectedUser] = useState(null)
+  const [selectedGroup, setSelectedGroup] = useState(null)
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
@@ -96,6 +116,16 @@ const ChatPage = () => {
     }
   }
 
+  const fetchGroups = async () => {
+    if (!token) return
+    try {
+      const response = await apiClient.get('/api/groups')
+      setGroups(Array.isArray(response.data) ? response.data : [])
+    } catch (error) {
+      console.error('Error fetching groups:', error)
+    }
+  }
+
   const updateConversationPreference = async (userId, preference, enabled) => {
     try {
       await apiClient.put(`/api/conversations/${userId}/preferences`, { preference, enabled })
@@ -125,8 +155,15 @@ const ChatPage = () => {
       return Number(Boolean(bSummary?.isPinned)) - Number(Boolean(aSummary?.isPinned))
     })
 
+  const filteredGroups = groups.filter(group => {
+    const normalizedSearch = conversationSearch.trim().toLowerCase()
+    const matchesSearch = !normalizedSearch || group.name.toLowerCase().includes(normalizedSearch)
+    return matchesSearch && conversationFilter !== 'archived'
+  })
+
   useEffect(() => {
     fetchConversationSummaries()
+    fetchGroups()
   }, [token])
 
   // Auto-scroll to bottom when new messages arrive
@@ -258,13 +295,28 @@ const ChatPage = () => {
     fetchUsers()
   }, [token, navigate])
 
-  // ✅ Fetch messages when a user is selected
   useEffect(() => {
-    if (!selectedUser || !token) return
+    const savedGroupId = localStorage.getItem('selectedGroupId')
+    if (!selectedUser && savedGroupId) {
+      const restoredGroup = groups.find(group => String(group._id) === String(savedGroupId))
+      if (restoredGroup) setSelectedGroup(restoredGroup)
+    }
+  }, [groups, selectedUser])
+
+  useEffect(() => {
+    if (socket) groups.forEach(group => socket.emit('joinGroup', { groupId: group._id }))
+  }, [socket, groups])
+
+  // Fetch messages for the selected direct or group conversation
+  useEffect(() => {
+    if ((!selectedUser && !selectedGroup) || !token) return
 
     const fetchMessages = async () => {
       try {
-        const response = await apiClient.get(`/api/messages/${selectedUser._id}`)
+        const response = await apiClient.get(selectedGroup
+          ? `/api/groups/${selectedGroup._id}/messages`
+          : `/api/messages/${selectedUser._id}`
+        )
         const normalized = response.data.map(msg => ({
           ...msg,
           sender: normalizeSender(msg.sender),
@@ -287,7 +339,7 @@ const ChatPage = () => {
       }
     }
     fetchMessages()
-  }, [selectedUser, token])
+  }, [selectedUser, selectedGroup, token])
 
   // Listen for incoming messages
   useEffect(() => {
@@ -311,8 +363,17 @@ const ChatPage = () => {
       }
 
       fetchConversationSummaries()
-      if (selectedUser) {
-        if (normalized.sender === selectedUser._id) {
+      const messageGroupId = normalized.group?._id || normalized.group
+      if (messageGroupId) {
+        setGroups(previous => previous.map(group => String(group._id) === String(messageGroupId)
+          ? { ...group, lastMessageText: normalized.text || (normalized.attachment?.resourceType === 'audio' ? 'Voice note' : normalized.attachment?.resourceType === 'raw' ? 'Document' : 'Attachment'), lastMessageAt: normalized.createdAt }
+          : group
+        ))
+      }
+      if (selectedGroup && String(messageGroupId) === String(selectedGroup._id)) {
+        setMessages(prev => prev.some(item => item._id === normalized._id) ? prev : [...prev, normalized])
+      } else if (selectedUser) {
+        if (normalized.sender === selectedUser._id && normalized.receiver === user?._id) {
           setMessages(prev => [...prev, normalized])
         } else if (normalized.sender === user?._id && normalized.receiver === selectedUser._id) {
           setMessages(prev => {
@@ -360,6 +421,17 @@ const ChatPage = () => {
         ))
       }
       toast.error(error || 'Failed to send message')
+    }
+
+    const handleNotificationCreated = () => {
+      setNotificationUnreadCount(previous => previous + 1)
+    }
+
+    const handleMessageStarUpdated = (updatedMessage) => {
+      setMessages(previous => previous.map(message => message._id === updatedMessage._id
+        ? { ...message, ...updatedMessage, isStarred: Boolean(updatedMessage.isStarred || updatedMessage.starredBy?.includes(user?._id)) }
+        : message
+      ))
     }
 
     const handleMessageUpdated = (updatedMessage) => {
@@ -443,6 +515,8 @@ const ChatPage = () => {
     socket.on('messageAcknowledged', handleMessageAcknowledged)
     socket.on('messageError', handleMessageError)
     socket.on('messageUpdated', handleMessageUpdated)
+    socket.on('messageStarUpdated', handleMessageStarUpdated)
+    socket.on('notificationCreated', handleNotificationCreated)
     socket.on('reactionUpdated', handleReactionUpdated)
     socket.on('messageDeleted', handleMessageDeleted)
     socket.on('messagesDelivered', handleMessagesDelivered)
@@ -453,6 +527,8 @@ const ChatPage = () => {
       socket.off('messageAcknowledged', handleMessageAcknowledged)
       socket.off('messageError', handleMessageError)
       socket.off('messageUpdated', handleMessageUpdated)
+      socket.off('messageStarUpdated', handleMessageStarUpdated)
+      socket.off('notificationCreated', handleNotificationCreated)
       socket.off('reactionUpdated', handleReactionUpdated)
       socket.off('messageDeleted', handleMessageDeleted)
       socket.off('messagesDelivered', handleMessagesDelivered)
@@ -525,6 +601,13 @@ const ChatPage = () => {
     setReplyToMessage(null)
   }
 
+  const openThread = (message) => setThreadRoot(message)
+
+  const starMessage = (message) => {
+    if (!socket || !message?._id) return
+    socket.emit('starMessage', { messageId: message._id, starred: !message.isStarred })
+  }
+
   const editMessage = (message) => {
     if (!socket || !message?.text || message.deleted) return
     const editedText = window.prompt('Edit message', message.text)
@@ -558,6 +641,7 @@ const ChatPage = () => {
 
   // ✅ SELECT USER - Persist to localStorage
   const selectUser = (chatUser) => {
+    setSelectedGroup(null)
     setSelectedUser(chatUser)
     window.history.pushState({ chatOpen: true }, '')
     localStorage.setItem('selectedUserId', chatUser._id)
@@ -573,15 +657,25 @@ const ChatPage = () => {
     }
   }
 
+  const selectGroup = (group) => {
+    setSelectedUser(null)
+    setSelectedGroup(group)
+    window.history.pushState({ chatOpen: true }, '')
+    localStorage.setItem('selectedGroupId', group._id)
+    localStorage.removeItem('selectedUserId')
+    socket?.emit('joinGroup', { groupId: group._id })
+    if (window.innerWidth < 1024) setSidebarOpen(false)
+  }
+
   const sendMessage = async (e) => {
     e.preventDefault()
     if (!newMessage.trim() && !uploadedAttachment) return
-    if (!selectedUser || !socket) return
+    if ((!selectedUser && !selectedGroup) || !socket) return
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
-    socket.emit('typing', { receiverId: selectedUser._id, isTyping: false })
+    if (selectedUser || selectedGroup) socket.emit('typing', { receiverId: selectedUser?._id || null, groupId: selectedGroup?._id || null, isTyping: false })
 
     const clientMessageId = typeof crypto?.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -589,7 +683,8 @@ const ChatPage = () => {
 
     const messageData = {
       clientMessageId,
-      receiverId: selectedUser._id,
+      receiverId: selectedUser?._id || null,
+      groupId: selectedGroup?._id || null,
       text: newMessage,
       image: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.url : '',
       imagePublicId: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.publicId : '',
@@ -598,14 +693,17 @@ const ChatPage = () => {
       attachment: uploadedAttachment || null,
       replyTo: replyToMessage?._id || null,
       replyToText: replyToMessage?.text || '',
-      replyToSender: replyToMessage?.sender || null
+      replyToSender: replyToMessage?.sender || null,
+      threadRoot: selectedGroup ? (replyToMessage?.threadRoot || replyToMessage?._id || null) : null,
+      mentions: extractMentionIds(newMessage, selectedGroup)
     }
 
     const tempMessage = {
       _id: clientMessageId,
       clientMessageId,
       sender: user._id,
-      receiver: selectedUser._id,
+      receiver: selectedUser?._id || null,
+      group: selectedGroup?._id || null,
       text: newMessage,
       image: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.url : '',
       video: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.url : '',
@@ -617,6 +715,8 @@ const ChatPage = () => {
       replyTo: replyToMessage?._id || null,
       replyToText: replyToMessage?.text || '',
       replyToSender: replyToMessage?.sender || null,
+      threadRoot: messageData.threadRoot || null,
+      mentions: messageData.mentions || [],
       status: 'sent',
       failed: false,
       messagePayload: messageData,
@@ -638,14 +738,14 @@ const ChatPage = () => {
 
   const handleTyping = (e) => {
     setNewMessage(e.target.value)
-    if (!selectedUser || !socket) return
+    if ((!selectedUser && !selectedGroup) || !socket) return
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
 
-    socket.emit('typing', { receiverId: selectedUser._id, isTyping: true })
+    socket.emit('typing', { receiverId: selectedUser?._id || null, groupId: selectedGroup?._id || null, isTyping: true })
 
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('typing', { receiverId: selectedUser._id, isTyping: false })
+      socket.emit('typing', { receiverId: selectedUser?._id || null, groupId: selectedGroup?._id || null, isTyping: false })
     }, 1500)
   }
 
@@ -653,7 +753,10 @@ const ChatPage = () => {
     return onlineUsers.some(u => u._id === userId)
   }
 
-  const isUserTyping = typingUsers.includes(selectedUser?._id)
+  const isUserTyping = typingUsers.some(entry => {
+    if (selectedGroup) return entry.groupId === String(selectedGroup._id)
+    return !entry.groupId && entry.userId !== String(user?._id) && entry.userId === String(selectedUser?._id)
+  })
   const isDark = theme.name === 'Dark'
 
   if (!user) return null
@@ -683,6 +786,10 @@ const ChatPage = () => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
+              <button type="button" onClick={() => setShowNotifications(true)} className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition" aria-label="Open notifications" title="Notifications">
+                <FiBell className="w-5 h-5 text-light-text-secondary dark:text-dark-text-secondary" />
+                {notificationUnreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center">{notificationUnreadCount > 9 ? '9+' : notificationUnreadCount}</span>}
+              </button>
               <ThemeToggle />
 
               <div className="flex items-center gap-2 sm:gap-3">
@@ -755,6 +862,20 @@ const ChatPage = () => {
                         <option value="all">All chats</option>
                         <option value="archived">Archived chats</option>
                       </select>
+                    </div>
+                    <div className="mb-4 border-b pb-3 border-gray-200 dark:border-white/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${theme.textSecondary}`}>Groups</span>
+                        <button type="button" onClick={() => setShowGroupCreator(true)} className="text-xs text-primary-500 hover:text-primary-600">+ New</button>
+                      </div>
+                      <div className="space-y-1">
+                        {filteredGroups.map(group => (
+                          <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? 'bg-primary-100 dark:bg-primary-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                            <span className="w-7 h-7 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold">{group.name.slice(0, 1).toUpperCase()}</span>
+                            <span className={`truncate ${theme.text}`}>{group.name}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {loading ? (
@@ -850,6 +971,20 @@ const ChatPage = () => {
                 <option value="archived">Archived chats</option>
               </select>
             </div>
+            <div className="mb-4 border-b pb-3 border-gray-200 dark:border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-xs font-semibold uppercase tracking-wide ${theme.textSecondary}`}>Groups</span>
+                <button type="button" onClick={() => setShowGroupCreator(true)} className="text-xs text-primary-500 hover:text-primary-600">+ New</button>
+              </div>
+              <div className="space-y-1">
+                {filteredGroups.map(group => (
+                  <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? 'bg-primary-100 dark:bg-primary-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                    <span className="w-7 h-7 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold">{group.name.slice(0, 1).toUpperCase()}</span>
+                    <span className={`truncate ${theme.text}`}>{group.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
             {loading ? (
               <div className="text-center text-gray-500 py-4 text-sm">Loading users...</div>
@@ -906,19 +1041,21 @@ const ChatPage = () => {
 
           {/* Chat Window - Full height on mobile with input at bottom */}
           <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
-            {selectedUser ? (
+            {(selectedUser || selectedGroup) ? (
               <>
                 {/* Chat Header */}
                 <div className={`flex items-center gap-2 sm:gap-3 pb-2 sm:pb-3 border-b ${isDark ? 'border-white/20' : theme.border} mb-2 sm:mb-4`}>
-                  <Avatar user={selectedUser} size="md" theme={theme} isDark={isDark} />
+                  <Avatar user={selectedUser || selectedGroup} size="md" theme={theme} isDark={isDark} />
                   <div className="flex-1 min-w-0">
                     <h3 className={`font-heading font-semibold ${theme.text} text-sm sm:text-base truncate`}>
-                      {selectedUser.name}
+                      {(selectedUser || selectedGroup).name}
                     </h3>
                     <p className={`text-[10px] sm:text-xs ${theme.textSecondary}`}>
-                      {isOnline(selectedUser._id) ? '🟢 Online' : '⚪ Offline'}
+                      {selectedGroup ? `${selectedGroup.members?.length || 0} members` : (isOnline(selectedUser._id) ? '🟢 Online' : '⚪ Offline')}
                     </p>
                   </div>
+                  {selectedUser && <SafetyActions user={selectedUser} />}
+                  {selectedGroup && <button type="button" onClick={() => setShowGroupSettings(true)} className="rounded-lg px-2 py-1 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20">Settings</button>}
                 </div>
 
                 {/* ✅ Messages with scroll container ref */}
@@ -949,7 +1086,7 @@ const ChatPage = () => {
                               <span className="text-sm italic opacity-60">
                                 {isMyMessage 
                                   ? 'You deleted this message' 
-                                  : `${selectedUser?.name || 'Someone'} deleted a message`}
+                                  : `${(selectedUser || selectedGroup)?.name || 'Someone'} deleted a message`}
                               </span>
                             </div>
                           ) : (
@@ -1016,6 +1153,9 @@ const ChatPage = () => {
                                   isMyMessage={isMyMessage}
                                   onDelete={handleDeleteMessage}
                                   onEdit={() => editMessage(msg)}
+                                  onStar={() => starMessage(msg)}
+                                  isStarred={msg.isStarred}
+                                  onThread={() => openThread(msg)}
                                   onCopy={() => handleCopyMessage(msg.text)}
                                   onReply={() => handleReply(msg)}
                                 />
@@ -1098,7 +1238,7 @@ const ChatPage = () => {
                   {isUserTyping && (
                     <div className="text-[10px] sm:text-xs text-primary-500 dark:text-primary-400 mb-1 sm:mb-2 flex items-center gap-1">
                       <span className="animate-pulse">●</span>
-                      <span>{selectedUser.name} is typing...</span>
+                      <span>{selectedGroup ? 'Someone' : selectedUser.name} is typing...</span>
                     </div>
                   )}
 
@@ -1113,11 +1253,11 @@ const ChatPage = () => {
                       />
                       <MediaUpload
                         onMediaUpload={handleMediaUpload}
-                        disabled={!selectedUser}
+                        disabled={!selectedUser && !selectedGroup}
                       />
                       <VoiceRecorder
                         onMediaUpload={handleMediaUpload}
-                        disabled={!selectedUser}
+                        disabled={!selectedUser && !selectedGroup}
                       />
                     </div>
                     <button
@@ -1166,6 +1306,30 @@ const ChatPage = () => {
         <ImageModal
           imageUrl={selectedImage}
           onClose={() => setSelectedImage(null)}
+        />
+      )}
+      <NotificationCenter open={showNotifications} onClose={() => setShowNotifications(false)} onUnreadChange={setNotificationUnreadCount} />
+      {showGroupCreator && (
+        <GroupCreateModal
+          users={users}
+          onClose={() => setShowGroupCreator(false)}
+          onCreated={(group) => {
+            setGroups(previous => [group, ...previous.filter(item => item._id !== group._id)])
+            selectGroup(group)
+          }}
+        />
+      )}
+      {threadRoot && <ThreadPanel rootMessage={threadRoot} onClose={() => setThreadRoot(null)} onReply={handleReply} />}
+      {showGroupSettings && selectedGroup && (
+        <GroupSettingsModal
+          group={selectedGroup}
+          users={users}
+          currentUserId={user._id}
+          onClose={() => setShowGroupSettings(false)}
+          onUpdated={(updatedGroup) => {
+            setSelectedGroup(updatedGroup)
+            setGroups(previous => previous.map(group => group._id === updatedGroup._id ? updatedGroup : group))
+          }}
         />
       )}
       {showProfile && (

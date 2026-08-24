@@ -9,7 +9,12 @@ const MessageSchema = new mongoose.Schema({
   receiver: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    default: null
+  },
+  group: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Group',
+    default: null
   },
   clientMessageId: {
     type: String,
@@ -67,6 +72,13 @@ const MessageSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  threadRoot: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Message',
+    default: null
+  },
+  mentions: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  starredBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   // ✅ STATUS FIELD - sent, delivered, read
   status: {
     type: String,
@@ -105,6 +117,8 @@ const MessageSchema = new mongoose.Schema({
 
 MessageSchema.index({ sender: 1, receiver: 1, createdAt: 1 });
 MessageSchema.index({ receiver: 1, read: 1, sender: 1 });
+MessageSchema.index({ group: 1, createdAt: 1 });
+MessageSchema.index({ threadRoot: 1, createdAt: 1 });
 MessageSchema.index(
   { sender: 1, clientMessageId: 1 },
   { unique: true, sparse: true }
