@@ -70,6 +70,12 @@ Aura is a full-stack, real-time chat application built on the MERN stack with So
 - Unread count badges
 - Read/unread state persisted to the database
 
+**History & Performance**
+- Cursor-paginated direct and group message history
+- Load-older control with stable chronological ordering
+- Viewport preservation while older messages are prepended
+- Legacy history response compatibility for existing API callers
+
 ---
 
 ## Tech Stack
@@ -269,6 +275,8 @@ npm run dev
 | `AI_API_URL` | OpenAI-compatible chat-completions endpoint |
 | `AI_API_KEY` | Server-only provider key; never expose it to the frontend |
 | `AI_MODEL` | Configurable provider model name |
+
+Message history endpoints accept optional `limit` and opaque `before` query parameters. Paginated responses have the shape `{ items, pagination: { limit, hasMore, nextCursor } }`; callers that omit pagination parameters retain the legacy array response.
 
 **Frontend (`frontend/.env`)**
 

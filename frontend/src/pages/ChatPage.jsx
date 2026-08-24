@@ -61,7 +61,22 @@ const normalizeUser = (userData) => {
     _id: userData._id || userData.id
   }
 }
-
+const normalizeChatMessage = (msg) => ({
+  ...msg,
+  sender: normalizeSender(msg.sender),
+  receiver: normalizeSender(msg.receiver),
+  reactions: normalizeReactions(msg.reactions),
+  deleted: msg.deleted || false,
+  deletedBy: msg.deletedBy || null,
+  replyTo: msg.replyTo || null,
+  replyToText: msg.replyToText || '',
+  replyToSender: msg.replyToSender || null,
+  status: msg.status || 'sent',
+  read: msg.read || false,
+  readAt: msg.readAt || null,
+  deliveredAt: msg.deliveredAt || null
+})
+const messageKey = (msg) => String(msg?._id || msg?.clientMessageId || '')
 const extractMentionIds = (text, group) => {
   if (!group || !Array.isArray(group.members)) return []
   const lowerText = text.toLowerCase()
@@ -86,6 +101,11 @@ const ChatPage = () => {
   const [selectedUser, setSelectedUser] = useState(null)
   const [selectedGroup, setSelectedGroup] = useState(null)
   const [messages, setMessages] = useState([])
+  const [historyCursor, setHistoryCursor] = useState(null)
+  const [hasMoreHistory, setHasMoreHistory] = useState(false)
+  const [loadingHistory, setLoadingHistory] = useState(false)
+  const historyRequestRef = useRef(0)
+  const prependingHistoryRef = useRef(false)
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploadedAttachment, setUploadedAttachment] = useState(null)
@@ -167,8 +187,9 @@ const ChatPage = () => {
     fetchGroups()
   }, [token])
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive, but preserve position while prepending history.
   useEffect(() => {
+    if (prependingHistoryRef.current) return
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
@@ -191,7 +212,7 @@ const ChatPage = () => {
   useEffect(() => {
     const previousMessageCount = previousMessageCountRef.current
     previousMessageCountRef.current = messages.length
-    if (!messages.length || messages.length <= previousMessageCount) return
+    if (prependingHistoryRef.current || !messages.length || messages.length <= previousMessageCount) return
 
     const container = scrollContainerRef.current
     if (!container) return
@@ -308,39 +329,81 @@ const ChatPage = () => {
     if (socket) groups.forEach(group => socket.emit('joinGroup', { groupId: group._id }))
   }, [socket, groups])
 
-  // Fetch messages for the selected direct or group conversation
+  // Fetch the newest page for the selected direct or group conversation.
   useEffect(() => {
     if ((!selectedUser && !selectedGroup) || !token) return
 
+    const requestId = ++historyRequestRef.current
+    setMessages([])
+    previousMessageCountRef.current = 0
+    setLoadingHistory(true)
+    setHistoryCursor(null)
+    setHasMoreHistory(false)
     const fetchMessages = async () => {
       try {
         const response = await apiClient.get(selectedGroup
           ? `/api/groups/${selectedGroup._id}/messages`
-          : `/api/messages/${selectedUser._id}`
+          : `/api/messages/${selectedUser._id}`,
+          { params: { limit: 50 } }
         )
-        const normalized = response.data.map(msg => ({
-          ...msg,
-          sender: normalizeSender(msg.sender),
-          receiver: normalizeSender(msg.receiver),
-          reactions: normalizeReactions(msg.reactions),
-          deleted: msg.deleted || false,
-          deletedBy: msg.deletedBy || null,
-          replyTo: msg.replyTo || null,
-          replyToText: msg.replyToText || '',
-          replyToSender: msg.replyToSender || null,
-          status: msg.status || 'sent',
-          read: msg.read || false,
-          readAt: msg.readAt || null,
-          deliveredAt: msg.deliveredAt || null
-        }))
-        setMessages(normalized)
+        if (requestId !== historyRequestRef.current) return
+        const payload = Array.isArray(response.data)
+          ? { items: response.data, pagination: {} }
+          : response.data
+        setMessages((payload.items || []).map(normalizeChatMessage))
+        setHistoryCursor(payload.pagination?.nextCursor || null)
+        setHasMoreHistory(Boolean(payload.pagination?.hasMore))
       } catch (error) {
-        console.error('Error fetching messages:', error)
-        toast.error('Failed to load messages')
+        if (requestId === historyRequestRef.current) {
+          console.error('Error fetching messages:', error)
+          toast.error('Failed to load messages')
+        }
+      } finally {
+        if (requestId === historyRequestRef.current) setLoadingHistory(false)
       }
     }
     fetchMessages()
   }, [selectedUser, selectedGroup, token])
+
+  const loadOlderMessages = async () => {
+    if ((!selectedUser && !selectedGroup) || !hasMoreHistory || !historyCursor || loadingHistory) return
+    const requestId = historyRequestRef.current
+    const container = scrollContainerRef.current
+    const previousScrollHeight = container?.scrollHeight || 0
+    setLoadingHistory(true)
+    try {
+      const response = await apiClient.get(selectedGroup
+        ? `/api/groups/${selectedGroup._id}/messages`
+        : `/api/messages/${selectedUser._id}`,
+        { params: { limit: 50, before: historyCursor } }
+      )
+      if (requestId !== historyRequestRef.current) return
+      const payload = Array.isArray(response.data)
+        ? { items: response.data, pagination: {} }
+        : response.data
+      const olderMessages = (payload.items || []).map(normalizeChatMessage)
+      prependingHistoryRef.current = true
+      setMessages(previous => {
+        const existing = new Set(previous.map(messageKey))
+        return [...olderMessages.filter(message => !existing.has(messageKey(message))), ...previous]
+      })
+      setHistoryCursor(payload.pagination?.nextCursor || null)
+      setHasMoreHistory(Boolean(payload.pagination?.hasMore))
+      requestAnimationFrame(() => {
+        const current = scrollContainerRef.current
+        if (current) current.scrollTop += current.scrollHeight - previousScrollHeight
+        prependingHistoryRef.current = false
+      })
+    } catch (error) {
+      if (requestId === historyRequestRef.current) {
+        console.error('Error loading older messages:', error)
+        toast.error('Failed to load older messages')
+      }
+      prependingHistoryRef.current = false
+    } finally {
+      if (requestId === historyRequestRef.current) setLoadingHistory(false)
+    }
+  }
 
   // Listen for incoming messages
   useEffect(() => {
@@ -1064,6 +1127,18 @@ const ChatPage = () => {
                   ref={scrollContainerRef}
                   className="flex-1 overflow-y-auto mb-2 sm:mb-4 space-y-2 sm:space-y-3 min-h-0"
                 >
+                  {hasMoreHistory && (
+                    <div className="flex justify-center pb-2">
+                      <button
+                        type="button"
+                        onClick={loadOlderMessages}
+                        disabled={loadingHistory}
+                        className={`rounded-full px-3 py-1 text-xs ${isDark ? 'bg-white/10 text-gray-200' : 'bg-gray-100 text-gray-600'} disabled:opacity-50`}
+                      >
+                        {loadingHistory ? 'Loading older messages…' : 'Load older messages'}
+                      </button>
+                    </div>
+                  )}
                   {messages.map((msg, index) => {
                     const senderId = normalizeSender(msg.sender)
                     const isMyMessage = String(senderId) === String(user?._id)
