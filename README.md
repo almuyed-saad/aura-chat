@@ -1,134 +1,107 @@
-# Aura — Real-Time Chat Application
+# Aura — Real-Time Communication Platform
 
-[![Frontend](https://img.shields.io/badge/Frontend-Vercel-000000?style=flat&logo=vercel)](https://aura-chat-topaz.vercel.app/)
-[![Backend](https://img.shields.io/badge/Backend-Render-46d2ff?style=flat&logo=render)](https://aura-backend-lu3g.onrender.com/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Frontend](https://img.shields.io/badge/Frontend-Vercel-000000?style=flat&logo=vercel&logoColor=white)](https://aura-chat-topaz.vercel.app/)
+[![Backend](https://img.shields.io/badge/Backend-Render-46d2ff?style=flat&logo=render&logoColor=white)](https://aura-backend-lu3g.onrender.com/)
+[![Stack](https://img.shields.io/badge/Stack-MERN%20%2B%20Socket.io-7c3aed?style=flat)](#technology-stack)
+[![License](https://img.shields.io/badge/License-MIT-2563eb?style=flat)](LICENSE)
 
-Aura is a full-stack, real-time chat application built on the MERN stack with Socket.io. It supports live messaging, read receipts, typing indicators, media sharing, and push notifications, with a responsive UI designed for both desktop and mobile.
+Aura is a full-stack, real-time communication platform built to demonstrate production-minded web engineering with the MERN stack and Socket.io. It combines responsive chat experiences, direct and group conversations, rich media, message workflows, privacy controls, theme customization, and database-backed persistence in one cohesive application.
 
-| Environment | URL |
+> **Portfolio project:** Aura is intentionally positioned as an intermediate-to-advanced demonstration project. Its core chat experience is deployed and usable, while enterprise operations such as long-term backup storage, large-scale load testing, and centralized observability remain optional extensions.
+
+## Live demo
+
+| Environment | Link | Purpose |
+|---|---|---|
+| **Web application** | [aura-chat-topaz.vercel.app](https://aura-chat-topaz.vercel.app/) | Responsive React frontend |
+| **Backend API** | [aura-backend-lu3g.onrender.com](https://aura-backend-lu3g.onrender.com/) | Express and Socket.io service |
+| **Health check** | [/health/live](https://aura-backend-lu3g.onrender.com/health/live) | Process liveness |
+| **Database readiness** | [/health/ready](https://aura-backend-lu3g.onrender.com/health/ready) | Application and MongoDB readiness |
+| **Source repository** | [github.com/almuyed-saad/aura-chat](https://github.com/almuyed-saad/aura-chat) | Source code and engineering history |
+
+Render’s free tier may briefly cold-start after inactivity. The public demo is intended for portfolio exploration rather than guaranteed enterprise availability.
+
+## Why this project is worth exploring
+
+Aura demonstrates the engineering decisions behind a modern messaging product rather than only a message input and a database table. The application handles authenticated real-time communication, reconnection-sensitive state, optimistic user interactions, delivery feedback, group permissions, media metadata, responsive layouts, and theme-aware interface states.
+
+The repository history is organized into reviewable releases. Stability and security were addressed before daily chat workflows, rich communication, product expansion, history performance, and visual polish. This sequence makes the project easier to review and shows how a working prototype can be progressively strengthened without directly rewriting the default branch for every experiment.
+
+## Feature overview
+
+| Area | Included capability |
 |---|---|
-| **Frontend (Vercel)** | [aura-chat-topaz.vercel.app](https://aura-chat-topaz.vercel.app/) |
-| **Backend API (Render)** | [aura-backend-lu3g.onrender.com](https://aura-backend-lu3g.onrender.com/) |
+| **Real-time messaging** | Direct conversations, Socket.io delivery, typing indicators, online presence, multi-device sessions, delivery acknowledgements, and idempotent client message IDs |
+| **Conversation workflows** | Conversation summaries, latest-message previews, unread counts, search, filtering, pinning, muting, archiving, editing, retrying, and read states |
+| **Group communication** | Group creation, member management, owner/admin/member roles, group settings, group rooms, group typing, mentions, invitations, and moderation-aware actions |
+| **Message organization** | Replies, threads, stars, reactions, soft deletion, message metadata, cursor-paginated history, and a load-older interaction that preserves scroll position |
+| **Rich communication** | Images, video, audio, voice notes, documents, drag-and-drop selection, previews, downloads, attachment metadata, and client/server validation |
+| **Safety and privacy** | JWT-protected APIs, normalized identities, strict payload validation, blocking, reporting, scoped access checks, and private server-side configuration |
+| **Notifications** | In-app notifications, unread counts, read-all behavior, mention/reply notifications, and optional web push support |
+| **Interface and accessibility** | Responsive desktop/mobile web UI, multiple themes, readable light/dark surfaces, visible focus states, theme-aware fields, avatars, active states, and installable PWA behavior |
+| **Optional AI assistance** | Consent-based smart replies, summaries, tone rewriting, and translation. This feature is disabled by default and is currently paused for the demo deployment |
+| **Operations tooling** | Scheduled MongoDB backup workflow, staging-only restore drill, and a guarded Socket.io load-test harness for disposable test accounts |
 
-> **Note:** The backend is hosted on Render's free tier and may take 30–60 seconds to respond after periods of inactivity (cold start).
+## Technology stack
 
----
-
-## Table of Contents
-
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Testing](#testing)
-- [PWA Support](#pwa-support)
-- [Deployment](#deployment)
-- [Known Issues & Fixes](#known-issues--fixes)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
-
----
-
-## Features
-
-**Core Messaging**
-- Real-time message delivery via Socket.io
-- Read receipts (Sent → Delivered → Seen)
-- Typing indicators
-- Online/offline presence status
-
-**Message Actions**
-- Emoji reactions on messages
-- Reply-to-message with quoting
-- Soft delete with placeholder text
-- Copy message to clipboard
-
-**Media Sharing**
-- Image upload and sharing via Cloudinary
-- Full-screen image preview modal
-
-**Notifications & PWA**
-- OS-level push notifications (desktop and Android)
-- Installable Progressive Web App
-- Offline support via service worker
-
-**UI & Theming**
-- Five built-in themes (Purple, Love, Romantic, Dark, Light)
-- Dark mode with proper contrast
-- Glassmorphism and smooth transitions
-- Fully responsive, mobile-first layout
-
-**Profile & Account**
-- Emoji-based avatar selection
-- Editable display name
-- Profile management modal
-
-**Unread Message Tracking**
-- Unread count badges
-- Read/unread state persisted to the database
-
-**History & Performance**
-- Cursor-paginated direct and group message history
-- Load-older control with stable chronological ordering
-- Viewport preservation while older messages are prepended
-- Legacy history response compatibility for existing API callers
-
----
-
-## Tech Stack
-
-**Frontend**
-
-| Technology | Purpose |
+| Layer | Technologies |
 |---|---|
-| React 18 | UI framework |
-| Vite | Build tool and dev server |
-| Tailwind CSS | Styling and responsive design |
-| Framer Motion | Animations and transitions |
-| React Router | Client-side routing |
-| Socket.io Client | Real-time communication |
-| Axios | HTTP client |
+| **Frontend** | React 18, Vite, Tailwind CSS, Framer Motion, React Router, Axios, Socket.io Client |
+| **Backend** | Node.js 18+, Express, Socket.io, JWT, bcryptjs, Mongoose |
+| **Database** | MongoDB Atlas or a local MongoDB deployment |
+| **Media** | Cloudinary unsigned browser uploads with server/client metadata validation |
+| **Notifications** | Web Push and in-app notification persistence |
+| **Hosting** | Vercel for the frontend, Render for the backend, MongoDB Atlas for persistence |
+| **Quality tooling** | Node’s built-in test runner, syntax checks, Vite production builds, npm production audits, GitHub pull requests, and GitHub Actions operations workflows |
 
-**Backend**
+## Architecture
 
-| Technology | Purpose |
-|---|---|
-| Node.js | Runtime environment |
-| Express | API framework |
-| MongoDB Atlas | Database |
-| Mongoose | ODM for MongoDB |
-| Socket.io | WebSocket server |
-| JWT | Authentication |
-| bcryptjs | Password hashing |
+```mermaid
+flowchart LR
+    Browser[React web client]
+    API[Express REST API]
+    Socket[Socket.io server]
+    DB[(MongoDB)]
+    Media[Cloudinary]
+    Push[Web Push]
+    AI[Optional compatible AI provider]
 
-**Infrastructure**
-
-| Service | Purpose |
-|---|---|
-| Cloudinary | Image storage and delivery |
-| Vercel | Frontend hosting |
-| Render | Backend hosting |
-| MongoDB Atlas | Database hosting |
-
----
-
-## Project Structure
-
+    Browser -->|Axios + JWT| API
+    Browser <-->|Authenticated events| Socket
+    API --> DB
+    Socket --> DB
+    Browser -->|Unsigned media upload| Media
+    API -->|Push notifications| Push
+    API -.->|Opt-in text-only requests| AI
 ```
+
+The browser communicates with the backend through authenticated REST requests and Socket.io events. MongoDB is the source of truth for users, messages, conversations, groups, notifications, reports, and push subscriptions. Optional AI calls are server-side only; the frontend never receives the provider key, and normal chat does not depend on AI availability.
+
+## Repository structure
+
+```text
 aura-chat/
+├── .github/
+│   └── workflows/
+│       ├── mongodb-backup.yml
+│       └── mongodb-restore-drill.yml
 ├── backend/
+│   ├── middleware/
+│   │   ├── auth.js
+│   │   └── rateLimit.js
 │   ├── models/
 │   │   ├── Conversation.js
 │   │   ├── Group.js
 │   │   ├── Message.js
 │   │   ├── Notification.js
-│   │   ├── Report.js
 │   │   ├── PushSubscription.js
+│   │   ├── Report.js
 │   │   └── User.js
+│   ├── ops/
+│   │   ├── load-test.mjs
+│   │   └── verify-restore.js
 │   ├── routes/
+│   │   ├── ai.js
 │   │   ├── auth.js
 │   │   ├── conversations.js
 │   │   ├── groups.js
@@ -138,255 +111,218 @@ aura-chat/
 │   │   ├── safety.js
 │   │   └── users.js
 │   ├── services/
+│   │   ├── aiService.js
 │   │   └── pushSender.js
-│   ├── middleware/
-│   │   └── auth.js
+│   ├── test/
+│   ├── utils/
 │   ├── server.js
 │   └── package.json
-│
 ├── frontend/
+│   ├── public/
 │   ├── src/
 │   │   ├── api/
-│   │   │   └── client.js
 │   │   ├── components/
-│   │   │   ├── Avatar.jsx
-│   │   │   ├── ImageModal.jsx
-│   │   │   ├── ImageUpload.jsx
-│   │   │   ├── MessageMenu.jsx
-│   │   │   ├── MessageReactions.jsx
-│   │   │   ├── MessageStatus.jsx
-│   │   │   ├── NotificationBanner.jsx
-│   │   │   ├── ProfileModal.jsx
-│   │   │   └── ThemeToggle.jsx
 │   │   ├── context/
-│   │   │   ├── SocketContext.jsx
-│   │   │   └── ThemeContext.jsx
 │   │   ├── data/
-│   │   │   └── avatarOptions.js
 │   │   ├── hooks/
-│   │   │   └── useNotifications.js
-│   │   ├── pages/
-│   │   │   ├── ChatPage.jsx
-│   │   │   ├── LoginPage.jsx
-│   │   │   └── RegisterPage.jsx
-│   │   ├── sw.js
-│   │   ├── App.jsx
-│   │   ├── config.js
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── public/
-│   │   ├── icons/
-│   │   └── favicon.ico
+│   │   └── pages/
 │   ├── index.html
-│   ├── vite.config.js
-│   └── package.json
-│
+│   ├── index.css
+│   ├── package.json
+│   └── vite.config.js
+├── OPERATIONS_RUNBOOK.md
 ├── vercel.json
-├── .gitignore
 └── README.md
 ```
 
----
-
-## Getting Started
+## Getting started locally
 
 ### Prerequisites
 
-- Node.js v18 or higher
-- npm or yarn
-- A MongoDB Atlas account (or a local MongoDB instance)
+You need Node.js 18 or newer, npm, and either a MongoDB Atlas database or a local MongoDB instance. Cloudinary and Web Push are optional for the basic text-chat flow but required for their respective features.
 
-### 1. Clone the Repository
+### 1. Clone and install
 
 ```bash
 git clone https://github.com/almuyed-saad/aura-chat.git
 cd aura-chat
-```
 
-### 2. Backend Setup
-
-```bash
 cd backend
+npm install
+
+cd ../frontend
 npm install
 ```
 
-Create a `.env` file in `backend/`:
+### 2. Configure the backend
+
+Create `backend/.env` using `backend/.env.example` as a starting point:
 
 ```env
 PORT=5000
-MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/chat-app
-JWT_SECRET=your_super_secret_key
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
+MONGO_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/aura-chat
+JWT_SECRET=replace-with-a-long-random-secret
+ALLOWED_ORIGINS=http://localhost:5173
+
+# Optional web push configuration
+VAPID_SUBJECT=mailto:you@example.com
 VAPID_PUBLIC_KEY=your_vapid_public_key
 VAPID_PRIVATE_KEY=your_vapid_private_key
-VAPID_SUBJECT=mailto:you@example.com
-ALLOWED_ORIGINS=https://aura-chat-topaz.vercel.app,http://localhost:5173
+
+# Optional AI configuration; disabled by default
+AI_ENABLED=false
+AI_API_URL=https://api.openai.com/v1/chat/completions
+AI_API_KEY=
+AI_MODEL=gpt-5-mini
 ```
 
-Start the backend server:
+Never commit `.env` files or put database, JWT, media, push, or AI secrets in frontend variables. The AI provider key is intended for the backend only.
 
-```bash
-npm run dev
-```
+### 3. Configure the frontend
 
-### 3. Frontend Setup
-
-```bash
-cd frontend
-npm install
-```
-
-Create a `.env` file in `frontend/`:
+Create `frontend/.env`:
 
 ```env
 VITE_API_URL=http://localhost:5000
+VITE_SOCKET_URL=http://localhost:5000
 VITE_VAPID_PUBLIC_KEY=your_vapid_public_key
+VITE_CLOUDINARY_CLOUD_NAME=your_cloudinary_cloud_name
+VITE_CLOUDINARY_UPLOAD_PRESET=your_restricted_unsigned_preset
 ```
 
-Start the frontend dev server:
+### 4. Start both applications
+
+In one terminal:
 
 ```bash
+cd backend
 npm run dev
 ```
 
-### 4. Open the App
+In another terminal:
 
-- **Try it live (no setup required):** [aura-chat-topaz.vercel.app](https://aura-chat-topaz.vercel.app/)
-- **Running locally:** navigate to `http://localhost:5173` in your browser.
+```bash
+cd frontend
+npm run dev
+```
 
----
+Open [http://localhost:5173](http://localhost:5173). Register two test accounts in separate browser profiles to verify direct delivery, read states, typing, and presence.
 
-## Environment Variables
+## Environment variables
 
-**Backend (`backend/.env`)**
+### Backend
 
-| Variable | Description |
-|---|---|
-| `PORT` | Server port (default: `5000`) |
-| `MONGO_URI` | MongoDB Atlas connection string |
-| `JWT_SECRET` | Secret key used to sign JWT tokens |
-| `VAPID_PUBLIC_KEY` | VAPID public key for push notifications |
-| `VAPID_PRIVATE_KEY` | VAPID private key for push notifications |
-| `VAPID_SUBJECT` | Contact URI used for push notification identification |
-| `ALLOWED_ORIGINS` | Comma-separated frontend origins allowed by API and Socket.io |
-| `AI_ENABLED` | Set to `true` to enable optional AI endpoints; defaults to disabled |
-| `AI_API_URL` | OpenAI-compatible chat-completions endpoint |
-| `AI_API_KEY` | Server-only provider key; never expose it to the frontend |
-| `AI_MODEL` | Configurable provider model name |
+| Variable | Required | Purpose |
+|---|---:|---|
+| `PORT` | No | Express server port; defaults to `5000` |
+| `MONGO_URI` | Yes | MongoDB connection string |
+| `JWT_SECRET` | Yes | Secret used to sign authentication tokens |
+| `ALLOWED_ORIGINS` | Yes in deployment | Comma-separated browser origins allowed by CORS and Socket.io |
+| `VAPID_SUBJECT` | No | Contact URI for Web Push |
+| `VAPID_PUBLIC_KEY` | No | Web Push public key |
+| `VAPID_PRIVATE_KEY` | No | Web Push private key |
+| `AI_ENABLED` | No | Set to `true` only after provider and privacy approval; defaults to disabled |
+| `AI_API_URL` | No | OpenAI-compatible chat-completions endpoint |
+| `AI_API_KEY` | No | Server-only provider key |
+| `AI_MODEL` | No | Provider model name |
 
-Message history endpoints accept optional `limit` and opaque `before` query parameters. Paginated responses have the shape `{ items, pagination: { limit, hasMore, nextCursor } }`; callers that omit pagination parameters retain the legacy array response.
+### Frontend
 
-**Frontend (`frontend/.env`)**
+| Variable | Required | Purpose |
+|---|---:|---|
+| `VITE_API_URL` | Yes | Backend base URL |
+| `VITE_SOCKET_URL` | No | Socket.io URL; defaults to the API URL |
+| `VITE_VAPID_PUBLIC_KEY` | No | Public key used by the browser for Web Push |
+| `VITE_CLOUDINARY_CLOUD_NAME` | For media | Public Cloudinary cloud name |
+| `VITE_CLOUDINARY_UPLOAD_PRESET` | For media | Restricted unsigned upload preset |
 
-| Variable | Description |
-|---|---|
-| `VITE_API_URL` | Base URL of the backend API |
-| `VITE_SOCKET_URL` | Optional Socket.io URL; defaults to `VITE_API_URL` |
-| `VITE_VAPID_PUBLIC_KEY` | VAPID public key for push notifications |
-| `VITE_CLOUDINARY_CLOUD_NAME` | Public Cloudinary cloud name |
-| `VITE_CLOUDINARY_UPLOAD_PRESET` | Restricted unsigned Cloudinary upload preset used for direct browser uploads; enable image, video, audio, and raw/document resource types |
+## Testing and quality checks
 
----
+The repository includes backend regression tests for validation, AI fail-closed behavior, identity normalization, and pagination. The recommended local verification sequence is:
 
-## Rich media
+```bash
+cd backend
+npm test
+find . -path './node_modules' -prune -o -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+npm audit --omit=dev --audit-level=moderate
 
-Aura supports images up to 10 MB, videos up to 25 MB, audio and voice notes up to 10 MB, and common documents up to 10 MB. Voice notes are recorded in the browser for a maximum of two minutes. Rich attachments are validated on both the client and server and are stored with their public URL, resource type, MIME type, filename, size, duration, and dimensions where available.
+cd ../frontend
+npm run build
+npm audit --omit=dev --audit-level=moderate
+```
 
-The unsigned Cloudinary upload preset must explicitly allow the image, video, and raw resource types required by the deployment. The public cloud name, preset name, and VAPID public key are client-visible configuration; no Cloudinary API secret is included in the frontend.
+The operations harness has a safe configuration check that does not send traffic:
 
-## AI assistance
+```bash
+cd backend
+LOAD_TEST_DRY_RUN=true \
+LOAD_TEST_USERS='[{"email":"load-a@example.com","password":"not-used"},{"email":"load-b@example.com","password":"not-used"}]' \
+npm run ops:load-test
+```
 
-AI features are disabled unless both `AI_ENABLED=true` and a server-side `AI_API_KEY` are configured. Even when the server is enabled, each user must explicitly opt in through the AI assistant panel. Aura sends only bounded text context to the provider, does not send attachments, does not log prompt content, and keeps normal chat delivery independent of AI availability. Users can use smart replies, two-sentence conversation summaries, tone rewriting, and translation after consent.
-
-AI requests are authenticated, rate-limited, time-bounded, and return generic provider errors to clients. The provider endpoint and model are configurable so a compatible service can be used without changing frontend code.
-
-## Testing
-
-**Manual two-user test:**
-
-1. Open a standard browser window and log in as User A.
-2. Open an incognito/private window and log in as User B.
-3. Send messages between the two accounts and confirm instant delivery.
-4. Add reactions and confirm they sync across both sessions.
-5. Share an image and confirm upload and display work correctly.
-
----
-
-## PWA Support
-
-Aura is fully installable as a Progressive Web App:
-
-- **Desktop:** Click the install icon in the browser's address bar.
-- **Android:** Use "Add to Home Screen" from the browser menu.
-- **iOS:** Use "Add to Home Screen" in Safari (Safari only).
-
----
+A real load run must use disposable staging accounts and requires `LOAD_TEST_CONFIRM=I_UNDERSTAND_TEST_DATA`. It refuses public targets by default and creates real test messages, so it should not be run against the portfolio demo or real user accounts.
 
 ## Deployment
 
-**Backend (Render)**
+### Backend on Render
 
-1. Push the repository to GitHub.
-2. Connect the repository to Render.
-3. Configure the required environment variables.
-4. Deploy the service.
+Create a Render web service for the `backend` directory, use `npm install` as the build command, and use `npm start` as the start command. Configure `MONGO_URI`, `JWT_SECRET`, `ALLOWED_ORIGINS`, and any optional media or push variables in Render’s private environment settings. AI variables should be added only if the feature is intentionally enabled.
 
-**Frontend (Vercel)**
+### Frontend on Vercel
 
-1. Push the repository to GitHub.
-2. Import the project into Vercel.
-3. Set `VITE_API_URL` to the deployed Render backend URL.
-4. Deploy the project.
+Import the repository into Vercel with `frontend` as the project root. Configure `VITE_API_URL` and, if needed, `VITE_SOCKET_URL` to point to the Render backend. Frontend variables must contain public configuration only; do not add `AI_API_KEY`, `JWT_SECRET`, or database credentials to Vercel.
 
----
+After deployment, verify `/health/live` and `/health/ready`, open the frontend in a private browser window, and exercise at least one direct conversation and one group conversation. A hard refresh may be needed after a frontend redeploy because browsers can retain an older PWA asset.
 
-## Known Issues & Fixes
+## Backup, restore, and load-testing operations
 
-| Issue | Resolution |
-|---|---|
-| Token expiration causing failed requests | Auto-logout implemented via an Axios response interceptor |
-| Image upload returning 403 | Switched to client-side unsigned uploads to Cloudinary |
-| Reactions not persisting after refresh | Normalized reactions from a `Map` to a plain object before storage |
-| Inconsistent message alignment | Normalized sender IDs for consistent client-side comparison |
+The repository includes optional operational workflows:
 
----
+- `.github/workflows/mongodb-backup.yml` runs a daily compressed MongoDB backup and uploads a checksum-protected artifact. It requires the private GitHub secret `MONGO_BACKUP_URI`.
+- `.github/workflows/mongodb-restore-drill.yml` is a manual, staging/test-only restore workflow. It requires `MONGO_RESTORE_URI` and must never target the production database.
+- `backend/ops/load-test.mjs` measures authenticated Socket.io concurrency, message acknowledgements, failures, and history latency. It requires disposable test accounts and a staging URL.
+
+Read the complete [operations runbook](OPERATIONS_RUNBOOK.md) before enabling these workflows. They are useful for a future production deployment but are not required for the demo chat experience.
+
+## Security and privacy notes
+
+Aura uses bearer-token authentication, strict server-side identity checks, normalized IDs, bounded validation, protected Socket.io rooms, idempotent message IDs, and rate limits on sensitive routes. Media uploads use public client configuration and a restricted unsigned Cloudinary preset; private Cloudinary API secrets are not sent to the browser.
+
+The optional AI feature is designed around explicit user consent. It is disabled unless the backend is configured, each user must opt in, only bounded text context is sent, attachments and deleted messages are excluded, prompt content is not logged, and disabling consent revokes the user preference. Normal chat continues independently when AI is absent or misconfigured.
+
+## Known demo-scope limitations
+
+Aura is suitable for portfolio presentation and interactive demonstrations, but it should not be represented as an enterprise-scale service without additional operational work. The public deployment uses free-tier hosting behavior, the optional AI provider is paused, and multi-user staging validation should be performed before any real-world launch. Backups and restore drills require private secrets and a separate target database; the repository provides the workflows but does not silently run destructive restores.
+
+No software release can honestly guarantee zero defects. The project uses isolated feature branches, regression tests, production builds, dependency audits, health checks, and explicit staging caveats to reduce risk while keeping the demo maintainable.
+
+## Portfolio talking points
+
+When presenting Aura, focus on the engineering story:
+
+1. It is a MERN application with real-time Socket.io communication rather than a static CRUD demo.
+2. It separates REST persistence from event-driven delivery and protects both with authenticated identity checks.
+3. It supports a realistic feature surface: direct and group chats, media, threads, mentions, notifications, safety actions, themes, and pagination.
+4. It includes quality practices such as regression tests, syntax checks, production builds, audits, health endpoints, isolated branches, and deployment verification.
+5. It documents tradeoffs honestly: demo-friendly hosting is different from a fully operated enterprise platform.
 
 ## Contributing
 
-Contributions are welcome. To contribute:
+Contributions are welcome. Create a focused branch, keep behavior changes isolated, run the backend tests and frontend build, and open a pull request with the verification results:
 
-1. Fork the repository.
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Commit your changes: `git commit -m "Add your feature"`
-4. Push the branch: `git push origin feature/your-feature`
-5. Open a Pull Request.
-
----
+```bash
+git checkout -b feature/your-feature
+git add .
+git commit -m "Describe the change"
+git push origin feature/your-feature
+```
 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
 
----
-
-## Acknowledgments
-
-- [Socket.io](https://socket.io/) — real-time communication
-- [Cloudinary](https://cloudinary.com/) — image hosting and delivery
-- [Tailwind CSS](https://tailwindcss.com/) — utility-first styling
-- [Framer Motion](https://www.framer.com/motion/) — animation library
-- [Vite PWA Plugin](https://vite-pwa-org.netlify.app/) — PWA tooling
-
----
-
 ## Contact
 
-**Developer:** Almuyed Saad
-**GitHub:** [@almuyed-saad](https://github.com/almuyed-saad)
+**Developer:** Almuyed Saad  
+**GitHub:** [@almuyed-saad](https://github.com/almuyed-saad)  
 **Repository:** [github.com/almuyed-saad/aura-chat](https://github.com/almuyed-saad/aura-chat)
-
----
-
-If you find this project useful, consider giving it a star on GitHub.
