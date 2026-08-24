@@ -33,6 +33,22 @@ test('normalizes valid login data', () => {
   assert.equal(result.value.email, 'user@example.com');
 });
 
+test('accepts a group message with bounded mentions and thread root', () => {
+  const result = validateMessagePayload({
+    groupId: validReceiverId,
+    text: 'Hello @Aura',
+    mentions: [validReceiverId],
+    threadRoot: validReceiverId
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.value.groupId, validReceiverId);
+  assert.deepEqual(result.value.mentions, [validReceiverId]);
+});
+
+test('rejects a payload that targets both a user and a group', () => {
+  assert.equal(validateMessagePayload({ receiverId: validReceiverId, groupId: validReceiverId, text: 'Hello' }).valid, false);
+});
+
 test('rejects an invalid recipient', () => {
   const result = validateMessagePayload({ receiverId: 'not-an-id', text: 'Hello' });
   assert.equal(result.valid, false);
@@ -54,6 +70,35 @@ test('accepts bounded text and media payloads', () => {
 
   assert.equal(result.valid, true);
   assert.equal(result.value.text, 'Hello');
+});
+
+test('accepts a bounded rich-media attachment', () => {
+  const result = validateMessagePayload({
+    receiverId: validReceiverId,
+    attachment: {
+      url: 'https://res.cloudinary.com/example/video/upload/voice.webm',
+      publicId: 'voice-note-1',
+      resourceType: 'audio',
+      mimeType: 'audio/webm',
+      fileName: 'voice-note.webm',
+      fileSize: 120000,
+      duration: 12
+    }
+  });
+  assert.equal(result.valid, true);
+  assert.equal(result.value.attachment.resourceType, 'audio');
+});
+
+test('rejects oversized rich-media attachments', () => {
+  const result = validateMessagePayload({
+    receiverId: validReceiverId,
+    attachment: {
+      url: 'https://res.cloudinary.com/example/raw/upload/file.pdf',
+      resourceType: 'raw',
+      fileSize: 26 * 1024 * 1024
+    }
+  });
+  assert.equal(result.valid, false);
 });
 
 test('rejects unsafe media URLs', () => {

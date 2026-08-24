@@ -1,32 +1,51 @@
 const mongoose = require('mongoose');
 
 const ConversationSchema = new mongoose.Schema({
+  participantKey: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
   participants: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: true
   }],
   lastMessage: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Message',
-    default: null,
+    default: null
   },
   lastMessageText: {
     type: String,
     default: '',
+    maxlength: 4000
   },
-  updatedAt: {
+  lastMessageSender: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  lastMessageAt: {
     type: Date,
     default: Date.now,
+    index: true
   },
-}, {
-  timestamps: true,
-});
+  pinnedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  mutedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  archivedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
+}, { timestamps: true });
 
-// Update updatedAt on save
-ConversationSchema.pre('save', function(next) {
-  this.updatedAt = Date.now();
-  next();
-});
+ConversationSchema.index({ participants: 1, lastMessageAt: -1 });
 
-module.exports = mongoose.model('Conversation', ConversationSchema);
+module.exports = mongoose.models.Conversation || mongoose.model('Conversation', ConversationSchema);

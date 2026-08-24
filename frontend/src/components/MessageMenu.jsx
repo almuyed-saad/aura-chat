@@ -1,14 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiMoreVertical, FiTrash2, FiCopy, FiCornerUpLeft } from 'react-icons/fi'
+import { FiMoreVertical, FiTrash2, FiCopy, FiCornerUpLeft, FiEdit3, FiStar } from 'react-icons/fi'
 
 const MessageMenu = ({
   messageId,
   isMyMessage,
   onDelete,
+  onEdit,
+  onStar,
+  isStarred,
   onCopy,
-  onReply
+  onReply,
+  onThread
 }) => {
   const [isOpen, setIsOpen] = useState(false)
   const [coords, setCoords] = useState({ top: 0, left: 0 })
@@ -71,6 +75,16 @@ const MessageMenu = ({
     setIsOpen(false)
   }
 
+  const handleStar = () => {
+    onStar?.()
+    setIsOpen(false)
+  }
+
+  const handleThread = () => {
+    onThread?.()
+    setIsOpen(false)
+  }
+
   return (
     <div className="relative inline-flex items-center">
       <button
@@ -114,6 +128,33 @@ const MessageMenu = ({
                 <FiCopy className="w-4 h-4" />
                 Copy
               </button>
+
+              {onThread && (
+                <button onClick={handleThread} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition">
+                  <FiCornerUpLeft className="w-4 h-4" />
+                  Thread
+                </button>
+              )}
+
+              {onStar && (
+                <button onClick={handleStar} className="w-full flex items-center gap-3 px-4 py-2 text-sm text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition">
+                  <FiStar className="w-4 h-4" />
+                  {isStarred ? 'Unstar' : 'Star'}
+                </button>
+              )}
+
+              {isMyMessage && onEdit && (
+                <button
+                  onClick={() => {
+                    onEdit()
+                    setIsOpen(false)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition"
+                >
+                  <FiEdit3 className="w-4 h-4" />
+                  Edit
+                </button>
+              )}
 
               {isMyMessage && (
                 <button

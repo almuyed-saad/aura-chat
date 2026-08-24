@@ -99,10 +99,11 @@ export const SocketProvider = ({ children }) => {
       })
 
       instance.on('typing', (data) => {
+        const entry = { userId: String(data.userId), groupId: data.groupId ? String(data.groupId) : null }
         if (data.isTyping) {
-          setTypingUsers(prev => [...new Set([...prev, data.userId])])
+          setTypingUsers(prev => [...prev.filter(item => item.userId !== entry.userId || item.groupId !== entry.groupId), entry])
         } else {
-          setTypingUsers(prev => prev.filter(id => id !== data.userId))
+          setTypingUsers(prev => prev.filter(item => item.userId !== entry.userId || item.groupId !== entry.groupId))
         }
       })
 

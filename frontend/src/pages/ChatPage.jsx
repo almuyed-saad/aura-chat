@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX } from 'react-icons/fi'
+import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX, FiStar, FiVolumeX, FiArchive, FiBell } from 'react-icons/fi'
 import ThemeToggle from '../components/ThemeToggle'
-import ImageUpload from '../components/ImageUpload'
+import MediaUpload from '../components/MediaUpload'
+import VoiceRecorder from '../components/VoiceRecorder'
 import ImageModal from '../components/ImageModal'
 import MessageReactions from '../components/MessageReactions'
 import MessageMenu from '../components/MessageMenu'
@@ -15,7 +16,26 @@ import toast from 'react-hot-toast'
 import { useNotifications } from '../hooks/useNotifications'
 import NotificationBanner from '../components/NotificationBanner'
 import ProfileModal from '../components/ProfileModal'
+import GroupCreateModal from '../components/GroupCreateModal'
+import NotificationCenter from '../components/NotificationCenter'
+import SafetyActions from '../components/SafetyActions'
+import GroupSettingsModal from '../components/GroupSettingsModal'
+import ThreadPanel from '../components/ThreadPanel'
+import AIAssist from '../components/AIAssist'
 import Avatar from '../components/Avatar'
+
+const formatFileSize = (bytes = 0) => {
+  if (!bytes) return ''
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const formatDuration = (seconds = 0) => {
+  if (!seconds) return ''
+  const minutes = Math.floor(seconds / 60)
+  const remaining = Math.round(seconds % 60).toString().padStart(2, '0')
+  return `${minutes}:${remaining}`
+}
 
 // Helper: Normalize reactions to a plain object { userId: emoji }.
 const normalizeReactions = (reactions) => {
@@ -42,18 +62,37 @@ const normalizeUser = (userData) => {
   }
 }
 
+const extractMentionIds = (text, group) => {
+  if (!group || !Array.isArray(group.members)) return []
+  const lowerText = text.toLowerCase()
+  return group.members
+    .filter(member => member.user && lowerText.includes(`@${member.user.name.toLowerCase().replace(/\s+/g, '')}`))
+    .map(member => member.user._id)
+}
+
 const ChatPage = () => {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [users, setUsers] = useState([])
+  const [groups, setGroups] = useState([])
+  const [showGroupCreator, setShowGroupCreator] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [showGroupSettings, setShowGroupSettings] = useState(false)
+  const [threadRoot, setThreadRoot] = useState(null)
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0)
+  const [conversationSummaries, setConversationSummaries] = useState([])
+  const [conversationSearch, setConversationSearch] = useState('')
+  const [conversationFilter, setConversationFilter] = useState('active')
   const [selectedUser, setSelectedUser] = useState(null)
+  const [selectedGroup, setSelectedGroup] = useState(null)
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [uploadedImage, setUploadedImage] = useState(null)
+  const [uploadedAttachment, setUploadedAttachment] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
+  const [editingMessageId, setEditingMessageId] = useState(null)
   // ✅ Scroll button states
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -67,6 +106,66 @@ const ChatPage = () => {
   const [showProfile, setShowProfile] = useState(false)
 
   const token = localStorage.getItem('token')
+
+  const fetchConversationSummaries = async () => {
+    if (!token) return
+    try {
+      const response = await apiClient.get('/api/conversations')
+      setConversationSummaries(Array.isArray(response.data) ? response.data : [])
+    } catch (error) {
+      console.error('Error fetching conversation summaries:', error)
+    }
+  }
+
+  const fetchGroups = async () => {
+    if (!token) return
+    try {
+      const response = await apiClient.get('/api/groups')
+      setGroups(Array.isArray(response.data) ? response.data : [])
+    } catch (error) {
+      console.error('Error fetching groups:', error)
+    }
+  }
+
+  const updateConversationPreference = async (userId, preference, enabled) => {
+    try {
+      await apiClient.put(`/api/conversations/${userId}/preferences`, { preference, enabled })
+      await fetchConversationSummaries()
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Could not update conversation')
+    }
+  }
+
+  const getConversationSummary = (userId) => conversationSummaries.find(
+    summary => String(summary.user?._id) === String(userId)
+  )
+
+  const filteredUsers = users
+    .filter(chatUser => {
+      const summary = getConversationSummary(chatUser._id)
+      const normalizedSearch = conversationSearch.trim().toLowerCase()
+      const matchesSearch = !normalizedSearch || chatUser.name.toLowerCase().includes(normalizedSearch) || chatUser.email.toLowerCase().includes(normalizedSearch)
+      const matchesFilter = conversationFilter === 'all'
+        || (conversationFilter === 'archived' && summary?.isArchived)
+        || (conversationFilter === 'active' && !summary?.isArchived)
+      return matchesSearch && matchesFilter
+    })
+    .sort((a, b) => {
+      const aSummary = getConversationSummary(a._id)
+      const bSummary = getConversationSummary(b._id)
+      return Number(Boolean(bSummary?.isPinned)) - Number(Boolean(aSummary?.isPinned))
+    })
+
+  const filteredGroups = groups.filter(group => {
+    const normalizedSearch = conversationSearch.trim().toLowerCase()
+    const matchesSearch = !normalizedSearch || group.name.toLowerCase().includes(normalizedSearch)
+    return matchesSearch && conversationFilter !== 'archived'
+  })
+
+  useEffect(() => {
+    fetchConversationSummaries()
+    fetchGroups()
+  }, [token])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -197,13 +296,28 @@ const ChatPage = () => {
     fetchUsers()
   }, [token, navigate])
 
-  // ✅ Fetch messages when a user is selected
   useEffect(() => {
-    if (!selectedUser || !token) return
+    const savedGroupId = localStorage.getItem('selectedGroupId')
+    if (!selectedUser && savedGroupId) {
+      const restoredGroup = groups.find(group => String(group._id) === String(savedGroupId))
+      if (restoredGroup) setSelectedGroup(restoredGroup)
+    }
+  }, [groups, selectedUser])
+
+  useEffect(() => {
+    if (socket) groups.forEach(group => socket.emit('joinGroup', { groupId: group._id }))
+  }, [socket, groups])
+
+  // Fetch messages for the selected direct or group conversation
+  useEffect(() => {
+    if ((!selectedUser && !selectedGroup) || !token) return
 
     const fetchMessages = async () => {
       try {
-        const response = await apiClient.get(`/api/messages/${selectedUser._id}`)
+        const response = await apiClient.get(selectedGroup
+          ? `/api/groups/${selectedGroup._id}/messages`
+          : `/api/messages/${selectedUser._id}`
+        )
         const normalized = response.data.map(msg => ({
           ...msg,
           sender: normalizeSender(msg.sender),
@@ -226,7 +340,7 @@ const ChatPage = () => {
       }
     }
     fetchMessages()
-  }, [selectedUser, token])
+  }, [selectedUser, selectedGroup, token])
 
   // Listen for incoming messages
   useEffect(() => {
@@ -249,8 +363,18 @@ const ChatPage = () => {
         deliveredAt: message.deliveredAt || null
       }
 
-      if (selectedUser) {
-        if (normalized.sender === selectedUser._id) {
+      fetchConversationSummaries()
+      const messageGroupId = normalized.group?._id || normalized.group
+      if (messageGroupId) {
+        setGroups(previous => previous.map(group => String(group._id) === String(messageGroupId)
+          ? { ...group, lastMessageText: normalized.text || (normalized.attachment?.resourceType === 'audio' ? 'Voice note' : normalized.attachment?.resourceType === 'raw' ? 'Document' : 'Attachment'), lastMessageAt: normalized.createdAt }
+          : group
+        ))
+      }
+      if (selectedGroup && String(messageGroupId) === String(selectedGroup._id)) {
+        setMessages(prev => prev.some(item => item._id === normalized._id) ? prev : [...prev, normalized])
+      } else if (selectedUser) {
+        if (normalized.sender === selectedUser._id && normalized.receiver === user?._id) {
           setMessages(prev => [...prev, normalized])
         } else if (normalized.sender === user?._id && normalized.receiver === selectedUser._id) {
           setMessages(prev => {
@@ -280,6 +404,7 @@ const ChatPage = () => {
         deliveredAt: message.deliveredAt || null
       }
 
+      fetchConversationSummaries()
       setMessages(prev => {
         const index = prev.findIndex(item => item.clientMessageId === clientMessageId || item._id === clientMessageId)
         if (index === -1) return [...prev, normalized]
@@ -291,9 +416,39 @@ const ChatPage = () => {
 
     const handleMessageError = ({ clientMessageId, error } = {}) => {
       if (clientMessageId) {
-        setMessages(prev => prev.filter(item => item.clientMessageId !== clientMessageId))
+        setMessages(prev => prev.map(item => item.clientMessageId === clientMessageId
+          ? { ...item, failed: true, status: 'failed' }
+          : item
+        ))
       }
       toast.error(error || 'Failed to send message')
+    }
+
+    const handleNotificationCreated = () => {
+      setNotificationUnreadCount(previous => previous + 1)
+    }
+
+    const handleMessageStarUpdated = (updatedMessage) => {
+      setMessages(previous => previous.map(message => message._id === updatedMessage._id
+        ? { ...message, ...updatedMessage, isStarred: Boolean(updatedMessage.isStarred || updatedMessage.starredBy?.includes(user?._id)) }
+        : message
+      ))
+    }
+
+    const handleMessageUpdated = (updatedMessage) => {
+      fetchConversationSummaries()
+      setMessages(prev => prev.map(msg => msg._id === updatedMessage._id
+        ? {
+            ...updatedMessage,
+            sender: normalizeSender(updatedMessage.sender),
+            receiver: normalizeSender(updatedMessage.receiver),
+            reactions: normalizeReactions(updatedMessage.reactions),
+            deleted: updatedMessage.deleted || false,
+            edited: updatedMessage.edited || false,
+            editedAt: updatedMessage.editedAt || null
+          }
+        : msg
+      ))
     }
 
     const handleReactionUpdated = (updatedMessage) => {
@@ -317,6 +472,7 @@ const ChatPage = () => {
     }
 
     const handleMessageDeleted = (updatedMessage) => {
+      fetchConversationSummaries()
       setMessages(prev => prev.map(msg =>
         msg._id === updatedMessage._id ? {
           ...updatedMessage,
@@ -359,6 +515,9 @@ const ChatPage = () => {
     socket.on('receiveMessage', handleReceiveMessage)
     socket.on('messageAcknowledged', handleMessageAcknowledged)
     socket.on('messageError', handleMessageError)
+    socket.on('messageUpdated', handleMessageUpdated)
+    socket.on('messageStarUpdated', handleMessageStarUpdated)
+    socket.on('notificationCreated', handleNotificationCreated)
     socket.on('reactionUpdated', handleReactionUpdated)
     socket.on('messageDeleted', handleMessageDeleted)
     socket.on('messagesDelivered', handleMessagesDelivered)
@@ -368,6 +527,9 @@ const ChatPage = () => {
       socket.off('receiveMessage', handleReceiveMessage)
       socket.off('messageAcknowledged', handleMessageAcknowledged)
       socket.off('messageError', handleMessageError)
+      socket.off('messageUpdated', handleMessageUpdated)
+      socket.off('messageStarUpdated', handleMessageStarUpdated)
+      socket.off('notificationCreated', handleNotificationCreated)
       socket.off('reactionUpdated', handleReactionUpdated)
       socket.off('messageDeleted', handleMessageDeleted)
       socket.off('messagesDelivered', handleMessagesDelivered)
@@ -375,12 +537,12 @@ const ChatPage = () => {
     }
   }, [socket, selectedUser, user])
 
-  const handleImageUpload = (imageUrl, imagePublicId) => {
-    setUploadedImage({ url: imageUrl, publicId: imagePublicId })
+  const handleMediaUpload = (attachment) => {
+    setUploadedAttachment(attachment)
   }
 
-  const clearUploadedImage = () => {
-    setUploadedImage(null)
+  const clearUploadedAttachment = () => {
+    setUploadedAttachment(null)
   }
 
   const handleReaction = (messageId, emoji) => {
@@ -440,6 +602,31 @@ const ChatPage = () => {
     setReplyToMessage(null)
   }
 
+  const openThread = (message) => setThreadRoot(message)
+
+  const starMessage = (message) => {
+    if (!socket || !message?._id) return
+    socket.emit('starMessage', { messageId: message._id, starred: !message.isStarred })
+  }
+
+  const editMessage = (message) => {
+    if (!socket || !message?.text || message.deleted) return
+    const editedText = window.prompt('Edit message', message.text)
+    if (!editedText || editedText.trim() === message.text.trim()) return
+    setEditingMessageId(message._id)
+    socket.emit('editMessage', { messageId: message._id, text: editedText })
+    setTimeout(() => setEditingMessageId(null), 1000)
+  }
+
+  const retryMessage = (message) => {
+    if (!socket || !message?.messagePayload) return
+    setMessages(prev => prev.map(item => item._id === message._id
+      ? { ...item, failed: false, status: 'sent' }
+      : item
+    ))
+    socket.emit('sendMessage', message.messagePayload)
+  }
+
   // ✅ Scroll functions
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -455,14 +642,15 @@ const ChatPage = () => {
 
   // ✅ SELECT USER - Persist to localStorage
   const selectUser = (chatUser) => {
+    setSelectedGroup(null)
     setSelectedUser(chatUser)
     window.history.pushState({ chatOpen: true }, '')
     localStorage.setItem('selectedUserId', chatUser._id)
     
-    if (unreadCounts[chatUser._id] > 0) {
+    const knownUnreadCount = unreadCounts?.[chatUser._id] ?? getConversationSummary(chatUser._id)?.unreadCount ?? 0
+    if (knownUnreadCount > 0 || socket) {
       clearUnreadCount(chatUser._id)
       socket?.emit('markAsRead', { senderId: chatUser._id })
-      console.log('📤 markAsRead emitted for:', chatUser.name)
     }
     
     if (window.innerWidth < 1024) {
@@ -470,15 +658,25 @@ const ChatPage = () => {
     }
   }
 
+  const selectGroup = (group) => {
+    setSelectedUser(null)
+    setSelectedGroup(group)
+    window.history.pushState({ chatOpen: true }, '')
+    localStorage.setItem('selectedGroupId', group._id)
+    localStorage.removeItem('selectedUserId')
+    socket?.emit('joinGroup', { groupId: group._id })
+    if (window.innerWidth < 1024) setSidebarOpen(false)
+  }
+
   const sendMessage = async (e) => {
     e.preventDefault()
-    if (!newMessage.trim() && !uploadedImage) return
-    if (!selectedUser || !socket) return
+    if (!newMessage.trim() && !uploadedAttachment) return
+    if ((!selectedUser && !selectedGroup) || !socket) return
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current)
     }
-    socket.emit('typing', { receiverId: selectedUser._id, isTyping: false })
+    if (selectedUser || selectedGroup) socket.emit('typing', { receiverId: selectedUser?._id || null, groupId: selectedGroup?._id || null, isTyping: false })
 
     const clientMessageId = typeof crypto?.randomUUID === 'function'
       ? crypto.randomUUID()
@@ -486,22 +684,31 @@ const ChatPage = () => {
 
     const messageData = {
       clientMessageId,
-      receiverId: selectedUser._id,
+      receiverId: selectedUser?._id || null,
+      groupId: selectedGroup?._id || null,
       text: newMessage,
-      image: uploadedImage?.url || '',
-      imagePublicId: uploadedImage?.publicId || '',
+      image: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.url : '',
+      imagePublicId: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.publicId : '',
+      video: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.url : '',
+      videoPublicId: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.publicId : '',
+      attachment: uploadedAttachment || null,
       replyTo: replyToMessage?._id || null,
       replyToText: replyToMessage?.text || '',
-      replyToSender: replyToMessage?.sender || null
+      replyToSender: replyToMessage?.sender || null,
+      threadRoot: selectedGroup ? (replyToMessage?.threadRoot || replyToMessage?._id || null) : null,
+      mentions: extractMentionIds(newMessage, selectedGroup)
     }
 
     const tempMessage = {
       _id: clientMessageId,
       clientMessageId,
       sender: user._id,
-      receiver: selectedUser._id,
+      receiver: selectedUser?._id || null,
+      group: selectedGroup?._id || null,
       text: newMessage,
-      image: uploadedImage?.url || '',
+      image: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.url : '',
+      video: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.url : '',
+      attachment: uploadedAttachment || null,
       createdAt: new Date().toISOString(),
       reactions: {},
       deleted: false,
@@ -509,7 +716,11 @@ const ChatPage = () => {
       replyTo: replyToMessage?._id || null,
       replyToText: replyToMessage?.text || '',
       replyToSender: replyToMessage?.sender || null,
+      threadRoot: messageData.threadRoot || null,
+      mentions: messageData.mentions || [],
       status: 'sent',
+      failed: false,
+      messagePayload: messageData,
       read: false,
       readAt: null,
       deliveredAt: null
@@ -518,7 +729,7 @@ const ChatPage = () => {
 
     socket.emit('sendMessage', messageData)
     setNewMessage('')
-    setUploadedImage(null)
+    setUploadedAttachment(null)
     setReplyToMessage(null)
 
     if (window.innerWidth < 1024) {
@@ -528,14 +739,14 @@ const ChatPage = () => {
 
   const handleTyping = (e) => {
     setNewMessage(e.target.value)
-    if (!selectedUser || !socket) return
+    if ((!selectedUser && !selectedGroup) || !socket) return
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current)
 
-    socket.emit('typing', { receiverId: selectedUser._id, isTyping: true })
+    socket.emit('typing', { receiverId: selectedUser?._id || null, groupId: selectedGroup?._id || null, isTyping: true })
 
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('typing', { receiverId: selectedUser._id, isTyping: false })
+      socket.emit('typing', { receiverId: selectedUser?._id || null, groupId: selectedGroup?._id || null, isTyping: false })
     }, 1500)
   }
 
@@ -543,7 +754,10 @@ const ChatPage = () => {
     return onlineUsers.some(u => u._id === userId)
   }
 
-  const isUserTyping = typingUsers.includes(selectedUser?._id)
+  const isUserTyping = typingUsers.some(entry => {
+    if (selectedGroup) return entry.groupId === String(selectedGroup._id)
+    return !entry.groupId && entry.userId !== String(user?._id) && entry.userId === String(selectedUser?._id)
+  })
   const isDark = theme.name === 'Dark'
 
   if (!user) return null
@@ -573,6 +787,10 @@ const ChatPage = () => {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-4">
+              <button type="button" onClick={() => setShowNotifications(true)} className="relative p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition" aria-label="Open notifications" title="Notifications">
+                <FiBell className="w-5 h-5 text-light-text-secondary dark:text-dark-text-secondary" />
+                {notificationUnreadCount > 0 && <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center">{notificationUnreadCount > 9 ? '9+' : notificationUnreadCount}</span>}
+              </button>
               <ThemeToggle />
 
               <div className="flex items-center gap-2 sm:gap-3">
@@ -628,22 +846,50 @@ const ChatPage = () => {
                       <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
                       <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
                       <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
-                        {users.length}
+                        {filteredUsers.length}
                       </span>
                       {!isConnected && <span className="text-xs text-red-500 ml-2">⚡</span>}
+                    </div>
+                    <div className="space-y-2 mb-3">
+                      <input
+                        value={conversationSearch}
+                        onChange={(event) => setConversationSearch(event.target.value)}
+                        placeholder="Search chats..."
+                        aria-label="Search chats"
+                        className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                      />
+                      <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'}`}>
+                        <option value="active">Active chats</option>
+                        <option value="all">All chats</option>
+                        <option value="archived">Archived chats</option>
+                      </select>
+                    </div>
+                    <div className="mb-4 border-b pb-3 border-gray-200 dark:border-white/10">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${theme.textSecondary}`}>Groups</span>
+                        <button type="button" onClick={() => setShowGroupCreator(true)} className="text-xs text-primary-500 hover:text-primary-600">+ New</button>
+                      </div>
+                      <div className="space-y-1">
+                        {filteredGroups.map(group => (
+                          <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? 'bg-primary-100 dark:bg-primary-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                            <span className="w-7 h-7 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold">{group.name.slice(0, 1).toUpperCase()}</span>
+                            <span className={`truncate ${theme.text}`}>{group.name}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     {loading ? (
                       <div className="text-center text-gray-500 py-4 text-sm">Loading...</div>
-                    ) : users.length === 0 ? (
+                    ) : filteredUsers.length === 0 ? (
                       <div className="text-center text-gray-500 py-4 text-sm">No users found.</div>
                     ) : (
                       <div className="space-y-1.5">
-                        {users.map((chatUser) => {
-                          const unreadCount = unreadCounts?.[chatUser._id] || 0
-                          const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null
-                          const isLatestFromThisUser = latestMessage && 
-                            (latestMessage.sender === chatUser._id || latestMessage.receiver === chatUser._id)
+                        {filteredUsers.map((chatUser) => {
+                          const summary = getConversationSummary(chatUser._id)
+                          const unreadCount = unreadCounts?.[chatUser._id] ?? summary?.unreadCount ?? 0
+                          const latestMessage = summary?.lastMessage
+                          const isLatestFromThisUser = Boolean(latestMessage)
 
                           return (
                             <motion.div
@@ -674,10 +920,21 @@ const ChatPage = () => {
                                 </div>
                                 {isLatestFromThisUser && latestMessage && (
                                   <p className={`text-[10px] sm:text-xs truncate ${unreadCount > 0 ? 'text-primary-500 dark:text-primary-400 font-medium' : theme.textSecondary}`}>
-                                    {latestMessage.sender === user._id ? 'You: ' : ''}
-                                    {latestMessage.deleted ? 'Message deleted' : latestMessage.text || (latestMessage.image ? '📷 Image' : '')}
+                                    {latestMessage.senderId === user._id ? 'You: ' : ''}
+                                    {latestMessage.text}
                                   </p>
                                 )}
+                              </div>
+                              <div className="flex items-center gap-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button type="button" title={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} aria-label={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'pinnedBy', !summary?.isPinned) }} className={`p-1 rounded ${summary?.isPinned ? 'text-amber-500' : 'text-gray-400 hover:text-amber-500'}`}>
+                                  <FiStar className="w-3.5 h-3.5" />
+                                </button>
+                                <button type="button" title={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} aria-label={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'mutedBy', !summary?.isMuted) }} className={`p-1 rounded ${summary?.isMuted ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                  <FiVolumeX className="w-3.5 h-3.5" />
+                                </button>
+                                <button type="button" title={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} aria-label={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'archivedBy', !summary?.isArchived) }} className={`p-1 rounded ${summary?.isArchived ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}`}>
+                                  <FiArchive className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </motion.div>
                           )
@@ -694,20 +951,49 @@ const ChatPage = () => {
           <div className={`hidden lg:block lg:col-span-1 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-4 transition-colors duration-500 max-h-[70vh] overflow-y-auto`}>
             <div className="flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}">
               <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
-              <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
+                              <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
               <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
-                {users.length}
+                {filteredUsers.length}
               </span>
+
               {!isConnected && <span className="text-xs text-red-500 ml-2">⚡ Disconnected</span>}
+            </div>
+            <div className="space-y-2 mb-3">
+              <input
+                value={conversationSearch}
+                onChange={(event) => setConversationSearch(event.target.value)}
+                placeholder="Search chats..."
+                aria-label="Search chats"
+                className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+              />
+              <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'}`}>
+                <option value="active">Active chats</option>
+                <option value="all">All chats</option>
+                <option value="archived">Archived chats</option>
+              </select>
+            </div>
+            <div className="mb-4 border-b pb-3 border-gray-200 dark:border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <span className={`text-xs font-semibold uppercase tracking-wide ${theme.textSecondary}`}>Groups</span>
+                <button type="button" onClick={() => setShowGroupCreator(true)} className="text-xs text-primary-500 hover:text-primary-600">+ New</button>
+              </div>
+              <div className="space-y-1">
+                {filteredGroups.map(group => (
+                  <button type="button" key={group._id} onClick={() => selectGroup(group)} className={`w-full text-left flex items-center gap-2 rounded-lg px-2 py-2 text-sm ${selectedGroup?._id === group._id ? 'bg-primary-100 dark:bg-primary-900/30' : 'hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+                    <span className="w-7 h-7 rounded-full bg-primary-500 text-white flex items-center justify-center text-xs font-bold">{group.name.slice(0, 1).toUpperCase()}</span>
+                    <span className={`truncate ${theme.text}`}>{group.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {loading ? (
               <div className="text-center text-gray-500 py-4 text-sm">Loading users...</div>
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <div className="text-center text-gray-500 py-4 text-sm">No users found.</div>
             ) : (
               <div className="space-y-1.5">
-                {users.map((chatUser) => {
+                {filteredUsers.map((chatUser) => {
                   const unreadCount = unreadCounts?.[chatUser._id] || 0
                   const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null
                   const isLatestFromThisUser = latestMessage && 
@@ -756,19 +1042,21 @@ const ChatPage = () => {
 
           {/* Chat Window - Full height on mobile with input at bottom */}
           <div className={`lg:col-span-3 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-3 sm:p-4 lg:p-6 flex flex-col h-full sm:min-h-[500px] transition-colors duration-500`}>
-            {selectedUser ? (
+            {(selectedUser || selectedGroup) ? (
               <>
                 {/* Chat Header */}
                 <div className={`flex items-center gap-2 sm:gap-3 pb-2 sm:pb-3 border-b ${isDark ? 'border-white/20' : theme.border} mb-2 sm:mb-4`}>
-                  <Avatar user={selectedUser} size="md" theme={theme} isDark={isDark} />
+                  <Avatar user={selectedUser || selectedGroup} size="md" theme={theme} isDark={isDark} />
                   <div className="flex-1 min-w-0">
                     <h3 className={`font-heading font-semibold ${theme.text} text-sm sm:text-base truncate`}>
-                      {selectedUser.name}
+                      {(selectedUser || selectedGroup).name}
                     </h3>
                     <p className={`text-[10px] sm:text-xs ${theme.textSecondary}`}>
-                      {isOnline(selectedUser._id) ? '🟢 Online' : '⚪ Offline'}
+                      {selectedGroup ? `${selectedGroup.members?.length || 0} members` : (isOnline(selectedUser._id) ? '🟢 Online' : '⚪ Offline')}
                     </p>
                   </div>
+                  {selectedUser && <SafetyActions user={selectedUser} />}
+                  {selectedGroup && <button type="button" onClick={() => setShowGroupSettings(true)} className="rounded-lg px-2 py-1 text-xs text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20">Settings</button>}
                 </div>
 
                 {/* ✅ Messages with scroll container ref */}
@@ -782,6 +1070,7 @@ const ChatPage = () => {
                     const isDeleted = msg.deleted === true
                     const hasReply = msg.replyTo || msg.replyToText
                     const replySenderName = msg.replyToSender?.name || 'Someone'
+                    const attachment = msg.attachment || null
 
                     return (
                                               <div key={msg._id || msg.clientMessageId || index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
@@ -798,7 +1087,7 @@ const ChatPage = () => {
                               <span className="text-sm italic opacity-60">
                                 {isMyMessage 
                                   ? 'You deleted this message' 
-                                  : `${selectedUser?.name || 'Someone'} deleted a message`}
+                                  : `${(selectedUser || selectedGroup)?.name || 'Someone'} deleted a message`}
                               </span>
                             </div>
                           ) : (
@@ -814,19 +1103,41 @@ const ChatPage = () => {
                                 </div>
                               )}
 
-                              {msg.image && (
+                              {(msg.image || attachment?.resourceType === 'image') && (
                                 <img
-                                  src={msg.image}
-                                  alt="Shared"
+                                  src={msg.image || attachment.url}
+                                  alt={attachment?.fileName || 'Shared image'}
                                   className="max-w-full rounded-lg mb-1 sm:mb-2 cursor-pointer hover:opacity-90 transition"
-                                  onClick={() => setSelectedImage(msg.image)}
+                                  onClick={() => setSelectedImage(msg.image || attachment.url)}
                                 />
+                              )}
+                              {attachment?.resourceType === 'video' && (
+                                <video controls preload="metadata" src={attachment.url || msg.video} className="max-w-full rounded-lg mb-1 sm:mb-2" />
+                              )}
+                              {attachment?.resourceType === 'audio' && (
+                                <div className="min-w-[220px] py-1">
+                                  <audio controls preload="metadata" src={attachment.url} className="w-full" />
+                                  {attachment.duration && <span className="text-xs opacity-70">Voice note · {formatDuration(attachment.duration)}</span>}
+                                </div>
+                              )}
+                              {attachment?.resourceType === 'raw' && (
+                                <a href={attachment.url} target="_blank" rel="noreferrer" download={attachment.fileName} className="flex items-center gap-2 rounded-lg border border-current/20 px-3 py-2 hover:bg-black/10 transition">
+                                  <span className="text-lg">▣</span>
+                                  <span className="min-w-0"><span className="block truncate text-sm font-medium">{attachment.fileName || 'Download document'}</span><span className="block text-xs opacity-70">{formatFileSize(attachment.fileSize)} · Open document</span></span>
+                                </a>
                               )}
                               {msg.text && <p className="text-sm sm:text-base break-words">{msg.text}</p>}
                               
                               <span className="text-[9px] sm:text-[10px] opacity-70 mt-0.5 sm:mt-1 flex items-center gap-1">
                                 {new Date(msg.createdAt).toLocaleTimeString()}
-                                {isMyMessage && <MessageStatus status={msg.status || 'sent'} />}
+                                {msg.edited && <span className="ml-1 italic">edited</span>}
+                                {editingMessageId === msg._id && <span className="ml-1 italic">saving…</span>}
+                                {isMyMessage && !msg.failed && <MessageStatus status={msg.status || 'sent'} />}
+                                {msg.failed && (
+                                  <button type="button" onClick={() => retryMessage(msg)} className="ml-1 text-red-500 underline hover:text-red-600">
+                                    Retry
+                                  </button>
+                                )}
                               </span>
 
                               {/* Reactions */}
@@ -842,6 +1153,10 @@ const ChatPage = () => {
                                   messageId={msg._id}
                                   isMyMessage={isMyMessage}
                                   onDelete={handleDeleteMessage}
+                                  onEdit={() => editMessage(msg)}
+                                  onStar={() => starMessage(msg)}
+                                  isStarred={msg.isStarred}
+                                  onThread={() => openThread(msg)}
                                   onCopy={() => handleCopyMessage(msg.text)}
                                   onReply={() => handleReply(msg)}
                                 />
@@ -924,46 +1239,49 @@ const ChatPage = () => {
                   {isUserTyping && (
                     <div className="text-[10px] sm:text-xs text-primary-500 dark:text-primary-400 mb-1 sm:mb-2 flex items-center gap-1">
                       <span className="animate-pulse">●</span>
-                      <span>{selectedUser.name} is typing...</span>
+                      <span>{selectedGroup ? 'Someone' : selectedUser.name} is typing...</span>
                     </div>
                   )}
 
+                  <AIAssist messages={messages} draft={newMessage} onDraftChange={setNewMessage} />
                   <form onSubmit={sendMessage} className={`flex gap-1 sm:gap-2 pt-2 sm:pt-3 border-t ${isDark ? 'border-white/20' : theme.border}`}>
                     <div className="flex-1 flex items-center gap-1 sm:gap-2">
                       <input
                         type="text"
                         value={newMessage}
                         onChange={handleTyping}
-                        placeholder={replyToMessage ? "Write a reply..." : uploadedImage ? "Add caption..." : "Type a message..."}
+                        placeholder={replyToMessage ? "Write a reply..." : uploadedAttachment ? "Add caption..." : "Type a message..."}
                         className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base border ${isDark ? 'border-white/20' : theme.border} ${isDark ? 'bg-[#1a1a1a]' : 'bg-light-surface'} ${theme.text} focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all font-input placeholder:${theme.textSecondary} min-h-[44px]`}
                       />
-                      <ImageUpload
-                        onImageUpload={handleImageUpload}
-                        disabled={!selectedUser}
+                      <MediaUpload
+                        onMediaUpload={handleMediaUpload}
+                        disabled={!selectedUser && !selectedGroup}
+                      />
+                      <VoiceRecorder
+                        onMediaUpload={handleMediaUpload}
+                        disabled={!selectedUser && !selectedGroup}
                       />
                     </div>
                     <button
                       type="submit"
-                      disabled={!newMessage.trim() && !uploadedImage}
+                      disabled={!newMessage.trim() && !uploadedAttachment}
                       className={`px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r ${theme.button} text-white rounded-xl font-btn font-semibold ${theme.shadow} hover:shadow-xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center`}
                     >
                       <FiSend className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                   </form>
 
-                  {uploadedImage && (
+                  {uploadedAttachment && (
                     <div className="mt-2 p-2 bg-light-card dark:bg-dark-card rounded-lg flex items-center gap-2 sm:gap-3">
-                      <img src={uploadedImage.url} alt="Preview" className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded" />
-                      <span className="text-xs sm:text-sm text-light-text-secondary dark:text-dark-text-secondary flex-1">
-                        Image ready to send
+                      {uploadedAttachment.resourceType === 'image' ? (
+                        <img src={uploadedAttachment.url} alt="Attachment preview" className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded" />
+                      ) : (
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-500 text-xs font-semibold">{uploadedAttachment.resourceType === 'audio' ? 'AUDIO' : uploadedAttachment.resourceType === 'video' ? 'VIDEO' : 'FILE'}</div>
+                      )}
+                      <span className="text-xs sm:text-sm text-light-text-secondary dark:text-dark-text-secondary flex-1 min-w-0 truncate">
+                        {uploadedAttachment.fileName || 'Attachment ready'} {formatFileSize(uploadedAttachment.fileSize)}
                       </span>
-                      <button
-                        type="button"
-                        onClick={clearUploadedImage}
-                        className="text-red-500 hover:text-red-600 p-1"
-                      >
-                        ✕
-                      </button>
+                      <button type="button" onClick={clearUploadedAttachment} className="text-red-500 hover:text-red-600 p-1" aria-label="Remove attachment">✕</button>
                     </div>
                   )}
                 </div>
@@ -990,6 +1308,30 @@ const ChatPage = () => {
         <ImageModal
           imageUrl={selectedImage}
           onClose={() => setSelectedImage(null)}
+        />
+      )}
+      <NotificationCenter open={showNotifications} onClose={() => setShowNotifications(false)} onUnreadChange={setNotificationUnreadCount} />
+      {showGroupCreator && (
+        <GroupCreateModal
+          users={users}
+          onClose={() => setShowGroupCreator(false)}
+          onCreated={(group) => {
+            setGroups(previous => [group, ...previous.filter(item => item._id !== group._id)])
+            selectGroup(group)
+          }}
+        />
+      )}
+      {threadRoot && <ThreadPanel rootMessage={threadRoot} onClose={() => setThreadRoot(null)} onReply={handleReply} />}
+      {showGroupSettings && selectedGroup && (
+        <GroupSettingsModal
+          group={selectedGroup}
+          users={users}
+          currentUserId={user._id}
+          onClose={() => setShowGroupSettings(false)}
+          onUpdated={(updatedGroup) => {
+            setSelectedGroup(updatedGroup)
+            setGroups(previous => previous.map(group => group._id === updatedGroup._id ? updatedGroup : group))
+          }}
         />
       )}
       {showProfile && (

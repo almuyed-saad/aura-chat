@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_URL_LENGTH = 2048;
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
 
 const isValidObjectId = (value) => mongoose.isValidObjectId(value);
 
@@ -53,21 +54,47 @@ const isSafeMediaUrl = (value) => {
   }
 };
 
-const validateMessagePayload = ({ receiverId, text, image, video, replyTo } = {}) => {
-  if (!isValidObjectId(receiverId)) {
-    return { valid: false, message: 'Invalid recipient' };
+const validateMessagePayload = ({ receiverId, groupId, text, image, video, attachment, replyTo, threadRoot, mentions } = {}) => {
+  const hasReceiver = isValidObjectId(receiverId);
+  const hasGroup = isValidObjectId(groupId);
+  if (hasReceiver && hasGroup) {
+    return { valid: false, message: 'Choose either a recipient or a group' };
+  }
+  if (!hasReceiver && !hasGroup) {
+    return { valid: false, message: receiverId ? 'Invalid recipient' : 'A valid recipient or group is required' };
   }
 
   const normalizedText = typeof text === 'string' ? text.trim() : '';
   const normalizedImage = typeof image === 'string' ? image.trim() : '';
   const normalizedVideo = typeof video === 'string' ? video.trim() : '';
+  const normalizedAttachment = attachment && typeof attachment === 'object' ? {
+    url: typeof attachment.url === 'string' ? attachment.url.trim() : '',
+    publicId: typeof attachment.publicId === 'string' ? attachment.publicId.slice(0, 255) : '',
+    resourceType: typeof attachment.resourceType === 'string' ? attachment.resourceType : '',
+    mimeType: typeof attachment.mimeType === 'string' ? attachment.mimeType.slice(0, 150) : '',
+    fileName: typeof attachment.fileName === 'string' ? attachment.fileName.trim().slice(0, 255) : '',
+    fileSize: Number(attachment.fileSize) || 0,
+    duration: Number(attachment.duration) || null,
+    width: Number(attachment.width) || null,
+    height: Number(attachment.height) || null
+  } : null;
 
   if (normalizedText.length > MAX_MESSAGE_LENGTH) {
     return { valid: false, message: `Message must be ${MAX_MESSAGE_LENGTH} characters or fewer` };
   }
 
-  if (!normalizedText && !normalizedImage && !normalizedVideo) {
+  if (!normalizedText && !normalizedImage && !normalizedVideo && !normalizedAttachment?.url) {
     return { valid: false, message: 'Message cannot be empty' };
+  }
+
+  if (normalizedAttachment) {
+    const allowedTypes = new Set(['image', 'video', 'audio', 'raw']);
+    if (!allowedTypes.has(normalizedAttachment.resourceType) || !isSafeMediaUrl(normalizedAttachment.url)) {
+      return { valid: false, message: 'Invalid attachment' };
+    }
+    if (!normalizedAttachment.fileSize || normalizedAttachment.fileSize > MAX_ATTACHMENT_SIZE) {
+      return { valid: false, message: 'Attachment must be 25MB or smaller' };
+    }
   }
 
   if (normalizedImage && !isSafeMediaUrl(normalizedImage)) {
@@ -78,18 +105,32 @@ const validateMessagePayload = ({ receiverId, text, image, video, replyTo } = {}
     return { valid: false, message: 'Invalid video URL' };
   }
 
+  const normalizedMentions = Array.isArray(mentions)
+    ? [...new Set(mentions.filter(isValidObjectId).map(String))].slice(0, 20)
+    : [];
+  if (Array.isArray(mentions) && normalizedMentions.length !== mentions.length) {
+    return { valid: false, message: 'Invalid mentions' };
+  }
+
   if (replyTo && !isValidObjectId(replyTo)) {
     return { valid: false, message: 'Invalid reply reference' };
+  }
+  if (threadRoot && !isValidObjectId(threadRoot)) {
+    return { valid: false, message: 'Invalid thread reference' };
   }
 
   return {
     valid: true,
     value: {
-      receiverId: String(receiverId),
+      receiverId: hasReceiver ? String(receiverId) : null,
+      groupId: hasGroup ? String(groupId) : null,
       text: normalizedText,
       image: normalizedImage,
       video: normalizedVideo,
-      replyTo: replyTo || null
+      attachment: normalizedAttachment,
+      replyTo: replyTo || null,
+      threadRoot: threadRoot || null,
+      mentions: normalizedMentions
     }
   };
 };
