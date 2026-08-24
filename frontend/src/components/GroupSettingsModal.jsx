@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react'
 import toast from 'react-hot-toast'
 import apiClient from '../api/client'
 import { useTheme } from '../context/ThemeContext'
+import Avatar from './Avatar'
 
 const GroupSettingsModal = ({ group, users, currentUserId, onClose, onUpdated }) => {
   const { theme } = useTheme()
@@ -83,7 +84,15 @@ const GroupSettingsModal = ({ group, users, currentUserId, onClose, onUpdated })
           {canManage && <button type="submit" disabled={saving} className="rounded-xl bg-primary-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-50">{saving ? 'Saving…' : 'Save details'}</button>}
         </form>
         {canManage && <div className={`border-t pt-4 ${isDark ? 'border-slate-700/80' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Add member</p><div className="flex gap-2"><select value={memberId} onChange={event => setMemberId(event.target.value)} style={{ colorScheme: isDark ? 'dark' : 'light' }} className={`${fieldClass} flex-1`}><option value="">Select a user</option>{availableUsers.map(user => <option key={user._id} value={user._id}>{user.name}</option>)}</select><button type="button" onClick={addMember} disabled={!memberId} className="rounded-xl bg-primary-500 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-600 disabled:opacity-50">Add</button></div></div>}
-        <div className={`border-t pt-4 ${isDark ? 'border-slate-700/80' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Members</p><div className="space-y-2">{(group.members || []).map(member => <div key={member.user?._id || member.user} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isDark ? 'hover:bg-slate-800/70' : 'hover:bg-slate-50'}`}><span className={`flex-1 text-sm ${theme.text}`}>{member.user?.name || 'Member'} <span className={`text-xs ${theme.textSecondary}`}>({member.role})</span></span>{canManage && member.role !== 'owner' && <span className="flex items-center gap-2"><button type="button" onClick={() => updateRole(member.user?._id || member.user, member.role === 'admin' ? 'member' : 'admin')} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-violet-200 hover:bg-violet-900/40' : 'text-violet-700 hover:bg-violet-50'}`}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button><button type="button" onClick={() => removeMember(member.user?._id || member.user)} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-rose-300 hover:bg-rose-950/40' : 'text-rose-700 hover:bg-rose-50'}`}>Remove</button></span>}</div>)}</div></div>
+        <div className={`border-t pt-4 ${isDark ? 'border-slate-700/80' : 'border-slate-200'}`}><p className={`text-sm font-semibold ${theme.text} mb-2`}>Members</p><div className="space-y-2">{(group.members || []).map(member => {
+          const memberUser = member.user && typeof member.user === 'object' ? member.user : { _id: member.user, name: 'Member' }
+          const memberIdValue = memberUser._id || member.user
+          return <div key={memberIdValue} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isDark ? 'hover:bg-slate-800/70' : 'hover:bg-slate-50'}`}>
+            <Avatar user={memberUser} size="sm" theme={theme} isDark={isDark} className="shrink-0" />
+            <span className={`flex-1 min-w-0 text-sm ${theme.text}`}><span className="truncate">{memberUser.name || 'Member'}</span> <span className={`text-xs ${theme.textSecondary}`}>({member.role})</span></span>
+            {canManage && member.role !== 'owner' && <span className="flex items-center gap-2"><button type="button" onClick={() => updateRole(memberIdValue, member.role === 'admin' ? 'member' : 'admin')} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-violet-200 hover:bg-violet-900/40' : 'text-violet-700 hover:bg-violet-50'}`}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button><button type="button" onClick={() => removeMember(memberIdValue)} className={`rounded-md px-2 py-1 text-xs font-medium ${isDark ? 'text-rose-300 hover:bg-rose-950/40' : 'text-rose-700 hover:bg-rose-50'}`}>Remove</button></span>}
+          </div>
+        })}</div></div>
         {!canManage && <p className={`text-xs ${theme.textSecondary}`}>Only group owners and admins can change group settings.</p>}
       </div>
     </div>
