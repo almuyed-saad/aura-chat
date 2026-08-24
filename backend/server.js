@@ -137,8 +137,10 @@ const isUserOnline = (userId) => userSocketMap.has(String(userId));
 const getMessagePreview = (message) => {
   if (message.deleted) return 'Message deleted';
   if (message.text) return message.text.slice(0, 400);
-  if (message.image) return 'Image';
-  if (message.video) return 'Video';
+  if (message.attachment?.resourceType === 'audio') return 'Voice note';
+  if (message.attachment?.resourceType === 'raw') return 'Document';
+  if (message.attachment?.resourceType === 'image' || message.image) return 'Image';
+  if (message.attachment?.resourceType === 'video' || message.video) return 'Video';
   return 'Message';
 };
 
@@ -247,6 +249,7 @@ io.on('connection', (socket) => {
           imagePublicId: typeof data.imagePublicId === 'string' ? data.imagePublicId.slice(0, 255) : '',
           video,
           videoPublicId: typeof data.videoPublicId === 'string' ? data.videoPublicId.slice(0, 255) : '',
+          attachment: validation.value.attachment,
           replyTo,
           replyToText: typeof data.replyToText === 'string' ? data.replyToText.trim().slice(0, 500) : '',
           replyToSender: isValidObjectId(data.replyToSender) ? data.replyToSender : null,
@@ -287,7 +290,7 @@ io.on('connection', (socket) => {
         const senderUser = await User.findById(socket.userId).select('name');
         sendPushToUser(receiverId, {
           title: senderUser?.name || 'New message',
-          body: text ? text.slice(0, 100) : (image ? '📷 Sent an image' : 'Sent a message'),
+          body: text ? text.slice(0, 100) : getMessagePreview(message),
           senderId: socket.userId,
           url: '/'
         }).catch(err => console.error('❌ Push trigger failed:', err));

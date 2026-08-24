@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX, FiStar, FiVolumeX, FiArchive } from 'react-icons/fi'
 import ThemeToggle from '../components/ThemeToggle'
-import ImageUpload from '../components/ImageUpload'
+import MediaUpload from '../components/MediaUpload'
+import VoiceRecorder from '../components/VoiceRecorder'
 import ImageModal from '../components/ImageModal'
 import MessageReactions from '../components/MessageReactions'
 import MessageMenu from '../components/MessageMenu'
@@ -16,6 +17,19 @@ import { useNotifications } from '../hooks/useNotifications'
 import NotificationBanner from '../components/NotificationBanner'
 import ProfileModal from '../components/ProfileModal'
 import Avatar from '../components/Avatar'
+
+const formatFileSize = (bytes = 0) => {
+  if (!bytes) return ''
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const formatDuration = (seconds = 0) => {
+  if (!seconds) return ''
+  const minutes = Math.floor(seconds / 60)
+  const remaining = Math.round(seconds % 60).toString().padStart(2, '0')
+  return `${minutes}:${remaining}`
+}
 
 // Helper: Normalize reactions to a plain object { userId: emoji }.
 const normalizeReactions = (reactions) => {
@@ -53,7 +67,7 @@ const ChatPage = () => {
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
-  const [uploadedImage, setUploadedImage] = useState(null)
+  const [uploadedAttachment, setUploadedAttachment] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
@@ -446,12 +460,12 @@ const ChatPage = () => {
     }
   }, [socket, selectedUser, user])
 
-  const handleImageUpload = (imageUrl, imagePublicId) => {
-    setUploadedImage({ url: imageUrl, publicId: imagePublicId })
+  const handleMediaUpload = (attachment) => {
+    setUploadedAttachment(attachment)
   }
 
-  const clearUploadedImage = () => {
-    setUploadedImage(null)
+  const clearUploadedAttachment = () => {
+    setUploadedAttachment(null)
   }
 
   const handleReaction = (messageId, emoji) => {
@@ -561,7 +575,7 @@ const ChatPage = () => {
 
   const sendMessage = async (e) => {
     e.preventDefault()
-    if (!newMessage.trim() && !uploadedImage) return
+    if (!newMessage.trim() && !uploadedAttachment) return
     if (!selectedUser || !socket) return
 
     if (typingTimeoutRef.current) {
@@ -577,8 +591,11 @@ const ChatPage = () => {
       clientMessageId,
       receiverId: selectedUser._id,
       text: newMessage,
-      image: uploadedImage?.url || '',
-      imagePublicId: uploadedImage?.publicId || '',
+      image: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.url : '',
+      imagePublicId: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.publicId : '',
+      video: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.url : '',
+      videoPublicId: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.publicId : '',
+      attachment: uploadedAttachment || null,
       replyTo: replyToMessage?._id || null,
       replyToText: replyToMessage?.text || '',
       replyToSender: replyToMessage?.sender || null
@@ -590,7 +607,9 @@ const ChatPage = () => {
       sender: user._id,
       receiver: selectedUser._id,
       text: newMessage,
-      image: uploadedImage?.url || '',
+      image: uploadedAttachment?.resourceType === 'image' ? uploadedAttachment.url : '',
+      video: uploadedAttachment?.resourceType === 'video' ? uploadedAttachment.url : '',
+      attachment: uploadedAttachment || null,
       createdAt: new Date().toISOString(),
       reactions: {},
       deleted: false,
@@ -609,7 +628,7 @@ const ChatPage = () => {
 
     socket.emit('sendMessage', messageData)
     setNewMessage('')
-    setUploadedImage(null)
+    setUploadedAttachment(null)
     setReplyToMessage(null)
 
     if (window.innerWidth < 1024) {
@@ -913,6 +932,7 @@ const ChatPage = () => {
                     const isDeleted = msg.deleted === true
                     const hasReply = msg.replyTo || msg.replyToText
                     const replySenderName = msg.replyToSender?.name || 'Someone'
+                    const attachment = msg.attachment || null
 
                     return (
                                               <div key={msg._id || msg.clientMessageId || index} className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}>
@@ -945,13 +965,28 @@ const ChatPage = () => {
                                 </div>
                               )}
 
-                              {msg.image && (
+                              {(msg.image || attachment?.resourceType === 'image') && (
                                 <img
-                                  src={msg.image}
-                                  alt="Shared"
+                                  src={msg.image || attachment.url}
+                                  alt={attachment?.fileName || 'Shared image'}
                                   className="max-w-full rounded-lg mb-1 sm:mb-2 cursor-pointer hover:opacity-90 transition"
-                                  onClick={() => setSelectedImage(msg.image)}
+                                  onClick={() => setSelectedImage(msg.image || attachment.url)}
                                 />
+                              )}
+                              {attachment?.resourceType === 'video' && (
+                                <video controls preload="metadata" src={attachment.url || msg.video} className="max-w-full rounded-lg mb-1 sm:mb-2" />
+                              )}
+                              {attachment?.resourceType === 'audio' && (
+                                <div className="min-w-[220px] py-1">
+                                  <audio controls preload="metadata" src={attachment.url} className="w-full" />
+                                  {attachment.duration && <span className="text-xs opacity-70">Voice note · {formatDuration(attachment.duration)}</span>}
+                                </div>
+                              )}
+                              {attachment?.resourceType === 'raw' && (
+                                <a href={attachment.url} target="_blank" rel="noreferrer" download={attachment.fileName} className="flex items-center gap-2 rounded-lg border border-current/20 px-3 py-2 hover:bg-black/10 transition">
+                                  <span className="text-lg">▣</span>
+                                  <span className="min-w-0"><span className="block truncate text-sm font-medium">{attachment.fileName || 'Download document'}</span><span className="block text-xs opacity-70">{formatFileSize(attachment.fileSize)} · Open document</span></span>
+                                </a>
                               )}
                               {msg.text && <p className="text-sm sm:text-base break-words">{msg.text}</p>}
                               
@@ -1073,36 +1108,38 @@ const ChatPage = () => {
                         type="text"
                         value={newMessage}
                         onChange={handleTyping}
-                        placeholder={replyToMessage ? "Write a reply..." : uploadedImage ? "Add caption..." : "Type a message..."}
+                        placeholder={replyToMessage ? "Write a reply..." : uploadedAttachment ? "Add caption..." : "Type a message..."}
                         className={`flex-1 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base border ${isDark ? 'border-white/20' : theme.border} ${isDark ? 'bg-[#1a1a1a]' : 'bg-light-surface'} ${theme.text} focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all font-input placeholder:${theme.textSecondary} min-h-[44px]`}
                       />
-                      <ImageUpload
-                        onImageUpload={handleImageUpload}
+                      <MediaUpload
+                        onMediaUpload={handleMediaUpload}
+                        disabled={!selectedUser}
+                      />
+                      <VoiceRecorder
+                        onMediaUpload={handleMediaUpload}
                         disabled={!selectedUser}
                       />
                     </div>
                     <button
                       type="submit"
-                      disabled={!newMessage.trim() && !uploadedImage}
+                      disabled={!newMessage.trim() && !uploadedAttachment}
                       className={`px-4 sm:px-6 py-2.5 sm:py-3 bg-gradient-to-r ${theme.button} text-white rounded-xl font-btn font-semibold ${theme.shadow} hover:shadow-xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center`}
                     >
                       <FiSend className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                   </form>
 
-                  {uploadedImage && (
+                  {uploadedAttachment && (
                     <div className="mt-2 p-2 bg-light-card dark:bg-dark-card rounded-lg flex items-center gap-2 sm:gap-3">
-                      <img src={uploadedImage.url} alt="Preview" className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded" />
-                      <span className="text-xs sm:text-sm text-light-text-secondary dark:text-dark-text-secondary flex-1">
-                        Image ready to send
+                      {uploadedAttachment.resourceType === 'image' ? (
+                        <img src={uploadedAttachment.url} alt="Attachment preview" className="w-10 h-10 sm:w-12 sm:h-12 object-cover rounded" />
+                      ) : (
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center text-primary-500 text-xs font-semibold">{uploadedAttachment.resourceType === 'audio' ? 'AUDIO' : uploadedAttachment.resourceType === 'video' ? 'VIDEO' : 'FILE'}</div>
+                      )}
+                      <span className="text-xs sm:text-sm text-light-text-secondary dark:text-dark-text-secondary flex-1 min-w-0 truncate">
+                        {uploadedAttachment.fileName || 'Attachment ready'} {formatFileSize(uploadedAttachment.fileSize)}
                       </span>
-                      <button
-                        type="button"
-                        onClick={clearUploadedImage}
-                        className="text-red-500 hover:text-red-600 p-1"
-                      >
-                        ✕
-                      </button>
+                      <button type="button" onClick={clearUploadedAttachment} className="text-red-500 hover:text-red-600 p-1" aria-label="Remove attachment">✕</button>
                     </div>
                   )}
                 </div>
