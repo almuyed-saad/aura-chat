@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiMoreVertical, FiTrash2, FiCopy, FiCornerUpLeft } from 'react-icons/fi'
+import { FiMoreVertical, FiTrash2, FiCopy, FiCornerUpLeft, FiEdit3 } from 'react-icons/fi'
 
 const MessageMenu = ({
   messageId,
   isMyMessage,
   onDelete,
+  onEdit,
   onCopy,
   onReply
 }) => {
@@ -114,6 +115,19 @@ const MessageMenu = ({
                 <FiCopy className="w-4 h-4" />
                 Copy
               </button>
+
+              {isMyMessage && onEdit && (
+                <button
+                  onClick={() => {
+                    onEdit()
+                    setIsOpen(false)
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition"
+                >
+                  <FiEdit3 className="w-4 h-4" />
+                  Edit
+                </button>
+              )}
 
               {isMyMessage && (
                 <button

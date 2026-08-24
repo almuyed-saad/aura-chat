@@ -115,11 +115,13 @@ Aura is a full-stack, real-time chat application built on the MERN stack with So
 aura-chat/
 ├── backend/
 │   ├── models/
+│   │   ├── Conversation.js
 │   │   ├── Message.js
 │   │   ├── PushSubscription.js
 │   │   └── User.js
 │   ├── routes/
 │   │   ├── auth.js
+│   │   ├── conversations.js
 │   │   ├── messages.js
 │   │   ├── push.js
 │   │   └── users.js

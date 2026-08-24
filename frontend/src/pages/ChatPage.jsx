@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX } from 'react-icons/fi'
+import { FiLogOut, FiMessageCircle, FiSend, FiMenu, FiX, FiStar, FiVolumeX, FiArchive } from 'react-icons/fi'
 import ThemeToggle from '../components/ThemeToggle'
 import ImageUpload from '../components/ImageUpload'
 import ImageModal from '../components/ImageModal'
@@ -46,6 +46,9 @@ const ChatPage = () => {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
   const [users, setUsers] = useState([])
+  const [conversationSummaries, setConversationSummaries] = useState([])
+  const [conversationSearch, setConversationSearch] = useState('')
+  const [conversationFilter, setConversationFilter] = useState('active')
   const [selectedUser, setSelectedUser] = useState(null)
   const [messages, setMessages] = useState([])
   const [newMessage, setNewMessage] = useState('')
@@ -54,6 +57,7 @@ const ChatPage = () => {
   const [selectedImage, setSelectedImage] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [replyToMessage, setReplyToMessage] = useState(null)
+  const [editingMessageId, setEditingMessageId] = useState(null)
   // ✅ Scroll button states
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
@@ -67,6 +71,49 @@ const ChatPage = () => {
   const [showProfile, setShowProfile] = useState(false)
 
   const token = localStorage.getItem('token')
+
+  const fetchConversationSummaries = async () => {
+    if (!token) return
+    try {
+      const response = await apiClient.get('/api/conversations')
+      setConversationSummaries(Array.isArray(response.data) ? response.data : [])
+    } catch (error) {
+      console.error('Error fetching conversation summaries:', error)
+    }
+  }
+
+  const updateConversationPreference = async (userId, preference, enabled) => {
+    try {
+      await apiClient.put(`/api/conversations/${userId}/preferences`, { preference, enabled })
+      await fetchConversationSummaries()
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Could not update conversation')
+    }
+  }
+
+  const getConversationSummary = (userId) => conversationSummaries.find(
+    summary => String(summary.user?._id) === String(userId)
+  )
+
+  const filteredUsers = users
+    .filter(chatUser => {
+      const summary = getConversationSummary(chatUser._id)
+      const normalizedSearch = conversationSearch.trim().toLowerCase()
+      const matchesSearch = !normalizedSearch || chatUser.name.toLowerCase().includes(normalizedSearch) || chatUser.email.toLowerCase().includes(normalizedSearch)
+      const matchesFilter = conversationFilter === 'all'
+        || (conversationFilter === 'archived' && summary?.isArchived)
+        || (conversationFilter === 'active' && !summary?.isArchived)
+      return matchesSearch && matchesFilter
+    })
+    .sort((a, b) => {
+      const aSummary = getConversationSummary(a._id)
+      const bSummary = getConversationSummary(b._id)
+      return Number(Boolean(bSummary?.isPinned)) - Number(Boolean(aSummary?.isPinned))
+    })
+
+  useEffect(() => {
+    fetchConversationSummaries()
+  }, [token])
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -249,6 +296,7 @@ const ChatPage = () => {
         deliveredAt: message.deliveredAt || null
       }
 
+      fetchConversationSummaries()
       if (selectedUser) {
         if (normalized.sender === selectedUser._id) {
           setMessages(prev => [...prev, normalized])
@@ -280,6 +328,7 @@ const ChatPage = () => {
         deliveredAt: message.deliveredAt || null
       }
 
+      fetchConversationSummaries()
       setMessages(prev => {
         const index = prev.findIndex(item => item.clientMessageId === clientMessageId || item._id === clientMessageId)
         if (index === -1) return [...prev, normalized]
@@ -291,9 +340,28 @@ const ChatPage = () => {
 
     const handleMessageError = ({ clientMessageId, error } = {}) => {
       if (clientMessageId) {
-        setMessages(prev => prev.filter(item => item.clientMessageId !== clientMessageId))
+        setMessages(prev => prev.map(item => item.clientMessageId === clientMessageId
+          ? { ...item, failed: true, status: 'failed' }
+          : item
+        ))
       }
       toast.error(error || 'Failed to send message')
+    }
+
+    const handleMessageUpdated = (updatedMessage) => {
+      fetchConversationSummaries()
+      setMessages(prev => prev.map(msg => msg._id === updatedMessage._id
+        ? {
+            ...updatedMessage,
+            sender: normalizeSender(updatedMessage.sender),
+            receiver: normalizeSender(updatedMessage.receiver),
+            reactions: normalizeReactions(updatedMessage.reactions),
+            deleted: updatedMessage.deleted || false,
+            edited: updatedMessage.edited || false,
+            editedAt: updatedMessage.editedAt || null
+          }
+        : msg
+      ))
     }
 
     const handleReactionUpdated = (updatedMessage) => {
@@ -317,6 +385,7 @@ const ChatPage = () => {
     }
 
     const handleMessageDeleted = (updatedMessage) => {
+      fetchConversationSummaries()
       setMessages(prev => prev.map(msg =>
         msg._id === updatedMessage._id ? {
           ...updatedMessage,
@@ -359,6 +428,7 @@ const ChatPage = () => {
     socket.on('receiveMessage', handleReceiveMessage)
     socket.on('messageAcknowledged', handleMessageAcknowledged)
     socket.on('messageError', handleMessageError)
+    socket.on('messageUpdated', handleMessageUpdated)
     socket.on('reactionUpdated', handleReactionUpdated)
     socket.on('messageDeleted', handleMessageDeleted)
     socket.on('messagesDelivered', handleMessagesDelivered)
@@ -368,6 +438,7 @@ const ChatPage = () => {
       socket.off('receiveMessage', handleReceiveMessage)
       socket.off('messageAcknowledged', handleMessageAcknowledged)
       socket.off('messageError', handleMessageError)
+      socket.off('messageUpdated', handleMessageUpdated)
       socket.off('reactionUpdated', handleReactionUpdated)
       socket.off('messageDeleted', handleMessageDeleted)
       socket.off('messagesDelivered', handleMessagesDelivered)
@@ -440,6 +511,24 @@ const ChatPage = () => {
     setReplyToMessage(null)
   }
 
+  const editMessage = (message) => {
+    if (!socket || !message?.text || message.deleted) return
+    const editedText = window.prompt('Edit message', message.text)
+    if (!editedText || editedText.trim() === message.text.trim()) return
+    setEditingMessageId(message._id)
+    socket.emit('editMessage', { messageId: message._id, text: editedText })
+    setTimeout(() => setEditingMessageId(null), 1000)
+  }
+
+  const retryMessage = (message) => {
+    if (!socket || !message?.messagePayload) return
+    setMessages(prev => prev.map(item => item._id === message._id
+      ? { ...item, failed: false, status: 'sent' }
+      : item
+    ))
+    socket.emit('sendMessage', message.messagePayload)
+  }
+
   // ✅ Scroll functions
   const scrollToBottom = () => {
     setTimeout(() => {
@@ -459,10 +548,10 @@ const ChatPage = () => {
     window.history.pushState({ chatOpen: true }, '')
     localStorage.setItem('selectedUserId', chatUser._id)
     
-    if (unreadCounts[chatUser._id] > 0) {
+    const knownUnreadCount = unreadCounts?.[chatUser._id] ?? getConversationSummary(chatUser._id)?.unreadCount ?? 0
+    if (knownUnreadCount > 0 || socket) {
       clearUnreadCount(chatUser._id)
       socket?.emit('markAsRead', { senderId: chatUser._id })
-      console.log('📤 markAsRead emitted for:', chatUser.name)
     }
     
     if (window.innerWidth < 1024) {
@@ -510,6 +599,8 @@ const ChatPage = () => {
       replyToText: replyToMessage?.text || '',
       replyToSender: replyToMessage?.sender || null,
       status: 'sent',
+      failed: false,
+      messagePayload: messageData,
       read: false,
       readAt: null,
       deliveredAt: null
@@ -628,22 +719,36 @@ const ChatPage = () => {
                       <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
                       <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
                       <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
-                        {users.length}
+                        {filteredUsers.length}
                       </span>
                       {!isConnected && <span className="text-xs text-red-500 ml-2">⚡</span>}
+                    </div>
+                    <div className="space-y-2 mb-3">
+                      <input
+                        value={conversationSearch}
+                        onChange={(event) => setConversationSearch(event.target.value)}
+                        placeholder="Search chats..."
+                        aria-label="Search chats"
+                        className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                      />
+                      <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'}`}>
+                        <option value="active">Active chats</option>
+                        <option value="all">All chats</option>
+                        <option value="archived">Archived chats</option>
+                      </select>
                     </div>
 
                     {loading ? (
                       <div className="text-center text-gray-500 py-4 text-sm">Loading...</div>
-                    ) : users.length === 0 ? (
+                    ) : filteredUsers.length === 0 ? (
                       <div className="text-center text-gray-500 py-4 text-sm">No users found.</div>
                     ) : (
                       <div className="space-y-1.5">
-                        {users.map((chatUser) => {
-                          const unreadCount = unreadCounts?.[chatUser._id] || 0
-                          const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null
-                          const isLatestFromThisUser = latestMessage && 
-                            (latestMessage.sender === chatUser._id || latestMessage.receiver === chatUser._id)
+                        {filteredUsers.map((chatUser) => {
+                          const summary = getConversationSummary(chatUser._id)
+                          const unreadCount = unreadCounts?.[chatUser._id] ?? summary?.unreadCount ?? 0
+                          const latestMessage = summary?.lastMessage
+                          const isLatestFromThisUser = Boolean(latestMessage)
 
                           return (
                             <motion.div
@@ -674,10 +779,21 @@ const ChatPage = () => {
                                 </div>
                                 {isLatestFromThisUser && latestMessage && (
                                   <p className={`text-[10px] sm:text-xs truncate ${unreadCount > 0 ? 'text-primary-500 dark:text-primary-400 font-medium' : theme.textSecondary}`}>
-                                    {latestMessage.sender === user._id ? 'You: ' : ''}
-                                    {latestMessage.deleted ? 'Message deleted' : latestMessage.text || (latestMessage.image ? '📷 Image' : '')}
+                                    {latestMessage.senderId === user._id ? 'You: ' : ''}
+                                    {latestMessage.text}
                                   </p>
                                 )}
+                              </div>
+                              <div className="flex items-center gap-1 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button type="button" title={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} aria-label={summary?.isPinned ? 'Unpin chat' : 'Pin chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'pinnedBy', !summary?.isPinned) }} className={`p-1 rounded ${summary?.isPinned ? 'text-amber-500' : 'text-gray-400 hover:text-amber-500'}`}>
+                                  <FiStar className="w-3.5 h-3.5" />
+                                </button>
+                                <button type="button" title={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} aria-label={summary?.isMuted ? 'Unmute chat' : 'Mute chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'mutedBy', !summary?.isMuted) }} className={`p-1 rounded ${summary?.isMuted ? 'text-blue-500' : 'text-gray-400 hover:text-blue-500'}`}>
+                                  <FiVolumeX className="w-3.5 h-3.5" />
+                                </button>
+                                <button type="button" title={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} aria-label={summary?.isArchived ? 'Unarchive chat' : 'Archive chat'} onClick={(event) => { event.stopPropagation(); updateConversationPreference(chatUser._id, 'archivedBy', !summary?.isArchived) }} className={`p-1 rounded ${summary?.isArchived ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}`}>
+                                  <FiArchive className="w-3.5 h-3.5" />
+                                </button>
                               </div>
                             </motion.div>
                           )
@@ -694,20 +810,35 @@ const ChatPage = () => {
           <div className={`hidden lg:block lg:col-span-1 ${theme.card} backdrop-blur-sm rounded-2xl shadow-xl ${isDark ? 'border border-white/20 shadow-2xl shadow-white/5' : `border ${theme.border}`} p-4 transition-colors duration-500 max-h-[70vh] overflow-y-auto`}>
             <div className="flex items-center gap-2 mb-4 pb-3 border-b ${isDark ? 'border-white/20' : theme.border}">
               <FiMessageCircle className={`${isDark ? 'text-white' : theme.accent}`} />
-              <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
+                              <h2 className={`font-heading font-semibold ${theme.text}`}>Chats</h2>
               <span className={`ml-auto text-xs bg-gradient-to-r ${theme.primary} text-white px-2 py-0.5 rounded-full`}>
-                {users.length}
+                {filteredUsers.length}
               </span>
+
               {!isConnected && <span className="text-xs text-red-500 ml-2">⚡ Disconnected</span>}
+            </div>
+            <div className="space-y-2 mb-3">
+              <input
+                value={conversationSearch}
+                onChange={(event) => setConversationSearch(event.target.value)}
+                placeholder="Search chats..."
+                aria-label="Search chats"
+                className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'} focus:outline-none focus:ring-2 focus:ring-primary-500`}
+              />
+              <select value={conversationFilter} onChange={(event) => setConversationFilter(event.target.value)} aria-label="Filter chats" className={`w-full rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-black/20 border-white/20 text-white' : 'bg-white border-gray-200'}`}>
+                <option value="active">Active chats</option>
+                <option value="all">All chats</option>
+                <option value="archived">Archived chats</option>
+              </select>
             </div>
 
             {loading ? (
               <div className="text-center text-gray-500 py-4 text-sm">Loading users...</div>
-            ) : users.length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <div className="text-center text-gray-500 py-4 text-sm">No users found.</div>
             ) : (
               <div className="space-y-1.5">
-                {users.map((chatUser) => {
+                {filteredUsers.map((chatUser) => {
                   const unreadCount = unreadCounts?.[chatUser._id] || 0
                   const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null
                   const isLatestFromThisUser = latestMessage && 
@@ -826,7 +957,14 @@ const ChatPage = () => {
                               
                               <span className="text-[9px] sm:text-[10px] opacity-70 mt-0.5 sm:mt-1 flex items-center gap-1">
                                 {new Date(msg.createdAt).toLocaleTimeString()}
-                                {isMyMessage && <MessageStatus status={msg.status || 'sent'} />}
+                                {msg.edited && <span className="ml-1 italic">edited</span>}
+                                {editingMessageId === msg._id && <span className="ml-1 italic">saving…</span>}
+                                {isMyMessage && !msg.failed && <MessageStatus status={msg.status || 'sent'} />}
+                                {msg.failed && (
+                                  <button type="button" onClick={() => retryMessage(msg)} className="ml-1 text-red-500 underline hover:text-red-600">
+                                    Retry
+                                  </button>
+                                )}
                               </span>
 
                               {/* Reactions */}
@@ -842,6 +980,7 @@ const ChatPage = () => {
                                   messageId={msg._id}
                                   isMyMessage={isMyMessage}
                                   onDelete={handleDeleteMessage}
+                                  onEdit={() => editMessage(msg)}
                                   onCopy={() => handleCopyMessage(msg.text)}
                                   onReply={() => handleReply(msg)}
                                 />
