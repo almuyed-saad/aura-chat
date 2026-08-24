@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import toast from 'react-hot-toast'
 import apiClient from '../api/client'
 import { useTheme } from '../context/ThemeContext'
+import Avatar from './Avatar'
 
 const GroupCreateModal = ({ users, onClose, onCreated }) => {
   const { theme } = useTheme()
@@ -55,12 +56,18 @@ const GroupCreateModal = ({ users, onClose, onCreated }) => {
         <div>
           <p className={`text-sm font-medium ${theme.text} mb-2`}>Add members</p>
           <div className={`max-h-40 overflow-y-auto space-y-1 rounded-xl border p-1 ${isDark ? 'border-slate-700/80 bg-slate-950/40' : 'border-slate-200 bg-slate-50'}`}>
-            {users.map(user => (
-              <label key={user._id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer ${isDark ? 'hover:bg-white/10' : 'hover:bg-white'}`}>
-                <input type="checkbox" checked={memberIds.includes(user._id)} onChange={() => toggleMember(user._id)} className={`h-4 w-4 rounded accent-primary-500 ${isDark ? 'border-white/30 bg-[#1a1a1a]' : 'border-slate-300 bg-white'}`} />
-                <span className={`text-sm ${theme.text}`}>{user.name}</span>
-              </label>
-            ))}
+            {users.map(user => {
+              const selected = memberIds.includes(user._id)
+              return (
+                <label key={user._id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 cursor-pointer transition-colors ${selected
+                  ? (isDark ? 'bg-violet-500/20 ring-1 ring-violet-300/40' : 'bg-primary-50 ring-1 ring-primary-200')
+                  : (isDark ? 'hover:bg-white/10' : 'hover:bg-white')}`}>
+                  <input type="checkbox" aria-label={`Add ${user.name}`} checked={selected} onChange={() => toggleMember(user._id)} className={`h-4 w-4 shrink-0 rounded accent-primary-500 ${isDark ? 'border-white/30 bg-[#172033]' : 'border-slate-300 bg-white'}`} />
+                  <Avatar user={user} size="sm" theme={theme} isDark={isDark} className="shrink-0" />
+                  <span className={`min-w-0 truncate text-sm font-medium ${theme.text}`}>{user.name}</span>
+                </label>
+              )
+            })}
           </div>
         </div>
         <div className={`flex justify-end gap-2 border-t pt-3 ${isDark ? 'border-white/15' : 'border-slate-200'}`}>
